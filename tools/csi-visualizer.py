@@ -19,7 +19,9 @@ import serial
 
 FRAME = re.compile(rb"CSI,\d+,(-?\d+),[01],([0-9a-f]{256})")
 JOIN = re.compile(rb"JOINED ip=([\d.]+) .*channel=(\d+) rssi=-?\d+")
-RELAY = re.compile(rb"RELAY,([0-9a-f]{12}),(-?\d+),([0-9a-f]{256})")
+RELAY = re.compile(rb"(RELAY|PEER),([0-9a-f]{12}),(-?\d+),([0-9a-f]{256})")
+BOARD_NAMES = {"6809479f27f4": "ESP32 #2", "6809471a80ac": "ESP32 #3"}
+PEER_PATH = "ESP32 #2 → #3"
 
 
 def amplitude(raw):
@@ -96,13 +98,20 @@ def read_gateway(port, updates, stop):
                         frame = RELAY.fullmatch(raw.strip())
                         if not frame:
                             continue
-                        current = amplitude(frame[3])
+                        kind, mac, rssi, raw_csi = frame.groups()
+                        current = amplitude(raw_csi)
                         if current is None:
                             continue
-                        receiver = "RX " + frame[1].decode()[-6:].upper()
+                        mac = mac.decode()
+                        receiver = BOARD_NAMES.get(mac, "RX " + mac[-6:].upper())
+                        if kind == b"PEER":
+                            if receiver != "ESP32 #3":
+                                continue
+                            receiver = PEER_PATH
                         if receiver in previous:
                             change = sum(abs(a - b) for a, b in zip(current, previous[receiver]))
-                            updates.put((receiver, "frame", (time.monotonic(), change, int(frame[2]))))
+                            updates.put((receiver, "frame",
+                                         (time.monotonic(), change, int(rssi), raw_csi.decode())))
                         previous[receiver] = current
                     if len(pending) > 2048:
                         pending.clear()
@@ -111,10 +120,12 @@ def read_gateway(port, updates, stop):
             stop.wait(3)
 
 
-def run_observatory(ports, updates, stop, external_traffic=False):
+def run_observatory(ports, updates, stop, external_traffic=False, detector=None):
     frames = {port: deque(maxlen=3500) for port in ports}
     status = dict.fromkeys(ports, "Connecting")
     state = b"[]"
+    scores = {}
+    next_inference = 0
 
     class Handler(SimpleHTTPRequestHandler):
         def do_GET(self):
@@ -124,6 +135,8 @@ def run_observatory(ports, updates, stop, external_traffic=False):
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Cache-Control", "no-store")
                 self.send_header("X-Stillpoint-Source", "esp32" if external_traffic else "router")
+                if detector is not None:
+                    self.send_header("X-Stillpoint-Gateway", "ESP32 #1")
                 self.send_header("Content-Length", str(len(payload)))
                 self.end_headers()
                 self.wfile.write(payload)
@@ -146,7 +159,7 @@ def run_observatory(ports, updates, stop, external_traffic=False):
                     port, kind, value = updates.get()
                     if kind == "frame":
                         if port not in frames:
-                            if len(frames) >= 2:
+                            if port != PEER_PATH and sum(name != PEER_PATH for name in frames) >= 2:
                                 continue
                             frames[port] = deque(maxlen=3500)
                             status[port] = "Waiting for CSI"
@@ -154,18 +167,35 @@ def run_observatory(ports, updates, stop, external_traffic=False):
                     else:
                         status[port] = value
                 now = time.monotonic()
+                infer = detector is not None and now >= next_inference
+                if infer:
+                    next_inference = now + 0.5
                 snapshot = []
                 for port, history in frames.items():
                     while history and history[0][0] < now - 30:
                         history.popleft()
                     recent = [frame for frame in history if frame[0] >= now - 2]
                     motion = statistics.median(frame[1] for frame in recent) if recent else None
+                    if infer:
+                        # Match the approximate 12 Hz rate of the training capture.
+                        bins = {}
+                        for frame in recent:
+                            age = now - frame[0]
+                            if age < detector.win_s:
+                                bins[int(age * 12)] = frame
+                        if len(bins) >= 9 and max(bins) >= 10 and min(bins) <= 1:
+                            window = sorted(bins.values())
+                            scores[port] = detector.predict([frame[3] for frame in window])[1]
+                        else:
+                            scores[port] = None
                     snapshot.append({
                         "port": port, "motion": motion,
                         "rssi": recent[-1][2] if recent else None,
                         "rate": len(recent) / 2,
                         "status": "Streaming" if recent else ("Stream paused" if history else status[port]),
-                        "samples": [[round(now - t, 2), round(change, 4)] for t, change, _ in history],
+                        "samples": [[round(now - frame[0], 2), round(frame[1], 4)] for frame in history],
+                        "p_moving": scores.get(port) if recent else None,
+                        "model_active": detector is not None,
                     })
                 state = json.dumps(snapshot).encode()
         finally:
@@ -185,18 +215,29 @@ def main():
     parser.add_argument("--observatory", action="store_true")
     parser.add_argument("--gateway", action="store_true",
                         help="Read wireless receiver samples from one transmitter USB port.")
+    parser.add_argument("--motion-model", action="store_true",
+                        help="Run the trained model on live gateway CSI.")
     parser.add_argument("--external-traffic", action="store_true",
                         help="Use packets from a dedicated transmitter instead of host probes.")
     args = parser.parse_args()
     if args.gateway and (not args.observatory or len(args.ports) != 1):
         parser.error("--gateway requires --observatory and exactly one USB port")
+    if args.motion_model and not args.gateway:
+        parser.error("--motion-model requires --gateway")
     password = input().rstrip("\r\n")
     updates = queue.SimpleQueue()
     stop = threading.Event()
     if args.gateway:
+        detector = None
+        if args.motion_model:
+            import sys
+            sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+            from detection.detector import CsiMotionDetector
+            detector = CsiMotionDetector()
         threading.Thread(target=read_gateway, args=(args.ports[0], updates, stop), daemon=True).start()
         try:
-            run_observatory([], updates, stop, external_traffic=True)
+            run_observatory(list(BOARD_NAMES.values()) if detector else [], updates, stop,
+                            external_traffic=True, detector=detector)
         except KeyboardInterrupt:
             pass
         finally:

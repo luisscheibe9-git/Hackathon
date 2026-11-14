@@ -1,7 +1,7 @@
 # NOTES
 
 ## Goal
-Hackathon project: 3x ESP32 Wi-Fi CSI sensing to detect falls of elderly residents and report when and in which room zone they happened. No cameras, no wearables.
+Build accurate person tracking and fall detection within the triangle formed by three ESP32 boards, using Wi-Fi CSI with only board #1 connected to the laptop. Accuracy must be measured against labeled positions and separate fall/activity trials.
 
 ## Team / repo
 - Repo: https://github.com/luisscheibe9-git/Hackathon (private). Collaborators with write access: Aouzzo, jbj4poly-dotcom.
@@ -33,7 +33,7 @@ Hackathon project: 3x ESP32 Wi-Fi CSI sensing to detect falls of elderly residen
 - Luis authorized flashing the hackathon ESP32 boards as needed without asking again.
 - Goal is a product to sell to nursing homes; the hackathon is the first demo. See `research/product.md` (market, competitors, product requirements).
 - Event rules, deadlines and judging rubric summarized in `research/hackathon-rules.md`. Key dates: project link Sat 2 PM, Sunday commit + live link Sat 8 PM, submissions close Sun 12 PM, demo is 4 min live + 3 min Q&A. 45/100 points are problem + path to customers, so talk to real caregivers this weekend.
-- Scope: fall detection + zone-level location. Not precise tracking or room mapping.
+- Scope: accurate person tracking and fall detection throughout the three-board triangle. Zone estimates are the current prototype stage.
 - Use CSI, not RSSI.
 - Hardware: 3x ESP32-U (original ESP32, external antenna). RuView doesn't support it → base is espressif/esp-csi + own Python pipeline.
 - Presence state machine to stop "person lying still" from reading as "empty room".
@@ -47,3 +47,21 @@ Hackathon project: 3x ESP32 Wi-Fi CSI sensing to detect falls of elderly residen
 ## Gotchas
 - CSI models don't transfer between rooms: retrain at the venue.
 - RuView does not support original ESP32 or ESP32-C3.
+
+
+## Latest verified hardware milestone — November 14, 2026
+- All three boards flashed and upload hashes verified using Arduino ESP32 core 3.3.12, target esp32:esp32:esp32.
+- Permanent board identities: #1 gateway 68:09:47:9f:1d:98, #2 receiver/probe sender 68:09:47:9f:27:f4, #3 receiver 68:09:47:1a:80:ac. COM ports may change.
+- Router-free CSI streams #1 → #2, #1 → #3 and #2 → #3 verified simultaneously. Only #1 needs laptop USB. #2 and #3 need steady power.
+- #2 sends ESP-NOW probes on the gateway channel. #3 forwards peer CSI using a separate PEER record. Observed rates were about 35, 46 and 23 frames/s respectively. Browser verification showed 3 sensing paths live.
+- Live motion model scores all three paths. Physical board labels, a guided two-path check, and animated path-zone marker are integrated. User reports substantially improved response after adding the third path.
+- Current marker blends fixed path midpoints based on motion scores. Accurate position tracking remains the next development goal. Fall detection is unvalidated and the fall rule is off by default.
+- Run tools/Start-CsiVisualizer.ps1 with -GatewayPort COM4 -MotionModel from this checkout. Open the URL printed at startup. Last verified URL was http://127.0.0.1:49367/ and changes on restart.
+- Active local checkout: C:/Users/lscheibe/AppData/Local/Stillpoint/three-board-test, branch claude/detector-compare-54380c. Main Desktop checkout is older and has separate uncommitted work.
+- Validation completed: both firmware builds, all three hardware uploads, simultaneous live CSI, parser test distinguishing three streams, JavaScript/Python syntax checks, browser rendering with real and synthetic streams.
+
+## Next calibration and detection work
+1. Measure board coordinates and heights, fix antenna placement, and capture a quiet baseline for each path.
+2. Add a labeled raw-CSI recording workflow for seven marked locations, including standing and small movements in different orientations. Repeat locations in a different order.
+3. Train a location model using all three streams, then measure distance error and zone confusion on separate walking passes. Position accuracy is currently unmeasured.
+4. Collect controlled fall-like movements and ordinary activities with labels. Evaluate missed detections and false alarms on separate trials before enabling a fall alert.

@@ -33,4 +33,14 @@ The receivers send UDP probes over the private ESP32 network and the transmitter
 
 Flash the current transmitter/gateway sketch to the board that stays connected to the laptop. Flash the current receiver sketch to both other boards, then power them from individual USB chargers or power banks. After a short wait for optional serial configuration, each receiver joins the gateway's private network and relays CSI readings to it over Wi-Fi. The gateway forwards both streams to the laptop over its single USB serial port.
 
-On Windows, launch with `./tools/Start-CsiVisualizer.ps1 -GatewayPort COM6` using the gateway's actual COM number. The Observatory labels each receiver by the last six digits of its Wi-Fi MAC address. Keep antennas attached to all boards.
+On Windows, launch with `./tools/Start-CsiVisualizer.ps1 -GatewayPort COM4 -MotionModel` using the gateway's actual COM number. The Observatory labels the physical boards #1, #2 and #3. Keep antennas attached to all boards.
+
+For the numbered three-board setup with `-MotionModel`, use **Start path check** in the Observatory. Leave #1 on USB and power #2 and #3 from steady USB sources. Fix the antenna positions so the two links spread apart and people can cross each one separately. The guided check compares a quiet baseline with crossings on each path and reports whether the receivers respond separately. The marker blends the midpoints of the available sensing paths. Position calibration and measured tracking accuracy are the next goals.
+
+To add the direct **#2 → #3** path, load `firmware/csi_link_check` on both receivers and `firmware/csi_transmitter` on gateway #1. The receiver sketch selects roles by station MAC. #2 sends ESP-NOW probe frames on the gateway channel and #3 relays the CSI for those frames separately from its gateway CSI. Once the gateway viewer sees the new stream, a third trace and edge appear. The guided check still tests the two gateway paths. To check the new path, cross the middle of #2–#3 away from #1 and watch its separate trace.
+
+## Current goal
+
+Build accurate person tracking and fall detection within the triangle formed by three ESP32 boards, using Wi-Fi CSI with only board #1 connected to the laptop. Accuracy must be measured against labeled positions and separate fall/activity trials.
+
+Three sensing paths are streaming. The marker currently estimates a path zone. Labeled position calibration and fall/activity validation remain in progress. See NOTES.md for hardware identities, verified results and next steps.

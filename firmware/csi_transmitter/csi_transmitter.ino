@@ -26,7 +26,7 @@ void loop() {
   if (started && traffic.parsePacket() > 0) {
     uint8_t packet[136];
     const int size = traffic.read(packet, sizeof(packet));
-    if (size == sizeof(packet) && packet[0] == 'C') {
+    if (size == sizeof(packet) && (packet[0] == 'C' || packet[0] == 'P')) {
       const char digits[] = "0123456789abcdef";
       char hex[257];
       for (size_t i = 0; i < 128; ++i) {
@@ -34,7 +34,8 @@ void loop() {
         hex[i * 2 + 1] = digits[packet[i + 8] & 15];
       }
       hex[256] = '\0';
-      Serial.printf("RELAY,%02x%02x%02x%02x%02x%02x,%d,%s\n",
+      Serial.printf("%s,%02x%02x%02x%02x%02x%02x,%d,%s\n",
+                    packet[0] == 'P' ? "PEER" : "RELAY",
                     packet[1], packet[2], packet[3], packet[4], packet[5], packet[6],
                     static_cast<int8_t>(packet[7]), hex);
     } else if (size == 3 && memcmp(packet, "CSI", 3) == 0 &&

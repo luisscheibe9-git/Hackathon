@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { PresenceCartography } from "./vendor/presence-cartography.js";
-import { createPersonLayer, demoMode, demoReceivers } from "./person-marker.js";
+import { createPersonLayer, demoMode, demoReceivers, P_HIGH } from "./person-marker.js?v=peer-path-1";
+import { createPathCheck } from "./path-check.js?v=2";
 
 const scene = new THREE.Scene();
 const stage = document.querySelector("#scene");
@@ -26,6 +27,7 @@ const field = new PresenceCartography(scene);
 field.setQuality(0);
 const router = new THREE.Vector3(0, 0.18, -1.8);
 const receiverPositions = [new THREE.Vector3(-1.8, 0.18, 1.55), new THREE.Vector3(1.55, 0.18, 1.55)];
+const peerPath = "ESP32 #2 → #3";
 const colors = [0x51e9c6, 0x8dbaff, 0xffb86b, 0xd99bff, 0xff7f9f];
 // Receivers beyond the first two are spread on an arc opposite the router (schematic only).
 function receiverPosition(index) {
@@ -34,6 +36,7 @@ function receiverPosition(index) {
   return new THREE.Vector3(-2.1 * Math.cos(angle), 0.18, -1.8 + 3.6 * Math.sin(angle));
 }
 const replayMode = new URLSearchParams(location.search).has("replay");
+const pathCheck = createPathCheck();
 const wire = new THREE.Mesh(new THREE.SphereGeometry(0.56, 18, 10),
   new THREE.MeshBasicMaterial({ color: 0x617aff, wireframe: true, transparent: true, opacity: 0.32 }));
 wire.position.copy(router);
@@ -47,13 +50,15 @@ let thresholds = new Map();
 let livePorts = [];
 let lastMotion = -Infinity;
 let activePath = null;
+let lastModelMotion = -Infinity;
+let recentModelPath = null;
 const motionMarker = document.createElement("div");
 motionMarker.className = "marker motion-marker";
 motionMarker.hidden = true;
 motionMarker.textContent = "Motion on this path";
 stage.append(motionMarker);
 const markerPosition = new THREE.Vector3();
-const person = createPersonLayer({ scene, stage, camera, router, positionLabel });
+const person = createPersonLayer({ scene, stage, positionLabel });
 const liveFetch = demoMode ? async () => new Response(JSON.stringify(demoReceivers(performance.now()))) : fetch.bind(window);
 
 calibrate.addEventListener("click", () => {
@@ -69,8 +74,26 @@ function detectMotion(receivers) {
   const now = performance.now();
   const live = receivers.filter(receiver => receiver.motion !== null && receiver.rate >= 5);
   livePorts = live.map(receiver => receiver.port);
+  const modelMode = !replayMode && (demoMode || receivers.some(receiver => receiver.model_active));
+  calibrate.hidden = modelMode;
   calibrate.disabled = !!calibration || !live.length;
   motionStatus.dataset.active = "false";
+  if (modelMode) {
+    const scored = live.filter(receiver => Number.isFinite(receiver.p_moving));
+    const strongest = scored.reduce((top, receiver) => !top || receiver.p_moving > top.p_moving ? receiver : top, null);
+    if (strongest?.p_moving >= P_HIGH) {
+      lastModelMotion = now;
+      recentModelPath = strongest.port;
+    }
+    const moving = scored.some(receiver => receiver.port === recentModelPath) && now - lastModelMotion < 1300;
+    activePath = moving ? recentModelPath : null;
+    motionStatus.dataset.active = String(moving);
+    motionStatus.textContent = moving ? "Motion detected" : scored.length ? "No motion detected" : "Waiting for model scores";
+    motionDetail.textContent = moving ? "Strongest recent motion on the path to " + activePath + ". Marker shows an estimated zone." :
+      scored.length ? "Watching " + scored.length + " of " + receivers.length + " paths. Walk through the triangle to see the estimate move." :
+        "The model needs a fresh window of CSI from a receiver.";
+    return;
+  }
   if (calibration) {
     if (now < calibration.start) {
       motionStatus.textContent = "Leave the room in " + Math.ceil((calibration.start - now) / 1000) + "s";
@@ -121,27 +144,31 @@ function detectMotion(receivers) {
 }
 
 function makeLink(port, index) {
-  const endpoint = receiverPosition(index);
+  const peer = port === peerPath;
+  const start = peer ? receiverPositions[0] : router;
+  const endpoint = peer || port === "ESP32 #3" ? receiverPositions[1] :
+    port === "ESP32 #2" ? receiverPositions[0] : receiverPosition(index);
   const color = colors[index % colors.length];
   const material = new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.3 });
-  const path = new THREE.Line(new THREE.BufferGeometry().setFromPoints([router, endpoint]), material);
+  const path = new THREE.Line(new THREE.BufferGeometry().setFromPoints([start, endpoint]), material);
   const packet = new THREE.Mesh(new THREE.SphereGeometry(0.075, 12, 8),
     new THREE.MeshBasicMaterial({ color }));
   const node = new THREE.Mesh(new THREE.BoxGeometry(0.19, 0.27, 0.19),
     new THREE.MeshBasicMaterial({ color, wireframe: true }));
   node.position.copy(endpoint);
-  scene.add(path, packet, node);
+  scene.add(path, packet);
+  if (!peer) scene.add(node);
 
   const marker = document.createElement("div");
   marker.className = "marker";
   marker.textContent = port;
-  document.querySelector("#markers").append(marker);
+  if (!peer) document.querySelector("#markers").append(marker);
 
   const card = document.createElement("article");
   card.innerHTML = "<header><h2></h2><span></span></header><p></p><canvas width='600' height='90' aria-label='CSI change over the last 30 seconds'></canvas>";
   card.querySelector("h2").textContent = port;
   document.querySelector("#receivers").append(card);
-  return { endpoint, material, packet, marker, card, motion: null };
+  return { start, endpoint, material, packet, marker, card, motion: null };
 }
 
 function positionLabel(element, point) {
@@ -157,7 +184,7 @@ function updateTrace(link, receiver) {
     message.includes("FileNotFoundError") ? "Board disconnected" : message;
   link.card.querySelector("p").textContent = receiver.motion === null ? "Waiting for live samples" :
     "CSI " + receiver.motion.toFixed(3) + "   ·   " + receiver.rate.toFixed(1) + " frames/s   ·   " + receiver.rssi + " dBm" +
-    (receiver.label ? "   ·   model: " + receiver.label + (receiver.p_moving == null ? "" : " (P(moving) " + receiver.p_moving.toFixed(2) + ")") : "");
+    (Number.isFinite(receiver.p_moving) ? "   ·   motion score " + Math.round(receiver.p_moving * 100) + "%" : "");
   const canvas = link.card.querySelector("canvas");
   const ctx = canvas.getContext("2d");
   ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -173,16 +200,16 @@ function updateTrace(link, receiver) {
 function updateFloor() {
   tiles.fill(0);
   for (const link of links.values()) {
-    const strength = link.motion === null ? 0 : Math.min(1, link.motion / 0.3);
+    const strength = link === links.get(activePath) ? 1 : link.motion === null ? 0 : Math.min(1, link.motion / 0.3);
     link.material.opacity = 0.17 + strength * 0.7;
     link.packet.visible = link.motion !== null;
-    const dx = link.endpoint.x - router.x;
-    const dz = link.endpoint.z - router.z;
+    const dx = link.endpoint.x - link.start.x;
+    const dz = link.endpoint.z - link.start.z;
     for (let i = 0; i < tiles.length; i++) {
       const x = (i % 20 - 10) * 0.242;
       const z = (Math.floor(i / 20) - 10) * 0.242;
-      const t = Math.min(1, Math.max(0, ((x - router.x) * dx + (z - router.z) * dz) / (dx * dx + dz * dz)));
-      const distance = Math.hypot(x - router.x - t * dx, z - router.z - t * dz);
+      const t = Math.min(1, Math.max(0, ((x - link.start.x) * dx + (z - link.start.z) * dz) / (dx * dx + dz * dz)));
+      const distance = Math.hypot(x - link.start.x - t * dx, z - link.start.z - t * dz);
       tiles[i] = Math.max(tiles[i], strength * Math.exp(-distance * distance / 0.28));
     }
   }
@@ -194,20 +221,30 @@ async function readLive() {
     const response = await liveFetch("/live", { signal: AbortSignal.timeout(2000) });
     if (!response.ok) throw new Error(response.status);
     const source = response.headers.get("X-Stillpoint-Source");
-    transmitterLabel.textContent = source === "esp32" ? "ESP32 transmitter" :
+    const gateway = response.headers.get("X-Stillpoint-Gateway");
+    transmitterLabel.textContent = gateway ? gateway + " · Gateway" : source === "esp32" ? "ESP32 transmitter" :
       source === "router" ? "Wi-Fi router" : "Wi-Fi transmitter";
     const receivers = await response.json();
+    pathCheck.update(!replayMode && !demoMode && gateway === "ESP32 #1", receivers);
     detectMotion(receivers);
-    for (const [index, receiver] of (replayMode ? receivers : receivers.slice(0, 2)).entries()) {
+    for (const [index, receiver] of receivers.entries()) {
       if (!links.has(receiver.port)) links.set(receiver.port, makeLink(receiver.port, index));
       updateTrace(links.get(receiver.port), receiver);
     }
     person.update(receivers, links, thresholds);
     const count = receivers.filter(receiver => receiver.motion !== null).length;
-    status.textContent = count ? count + (count === 1 ? " receiver" : " receivers") + (replayMode ? " replaying" : demoMode ? " simulated" : " live") : "Waiting for CSI";
+    const unit = receivers.some(receiver => receiver.port === peerPath) ? " sensing paths" : count === 1 ? " receiver" : " receivers";
+    status.textContent = count ? count + unit + (replayMode ? " replaying" : demoMode ? " simulated" : " live") : "Waiting for CSI";
     if (replayMode && !demoMode) await readReplay();
   } catch {
-    detectMotion([]);
+    pathCheck.update(false, []);
+    activePath = null;
+    lastModelMotion = -Infinity;
+    calibrate.disabled = true;
+    motionStatus.dataset.active = "false";
+    motionStatus.textContent = "Live feed unavailable";
+    motionDetail.textContent = "Waiting to reconnect to the capture service.";
+    person.update([], links, thresholds);
     for (const [port, link] of links) updateTrace(link, { port, motion: null, status: "Disconnected", samples: [] });
     status.textContent = "Capture service disconnected";
   } finally {
@@ -260,13 +297,13 @@ renderer.setAnimationLoop((time) => {
   wire.rotation.y = time / 2200;
   positionLabel(transmitterLabel, wire.position);
   for (const link of links.values()) {
-    link.packet.position.lerpVectors(router, link.endpoint, (time % 1250) / 1250);
+    link.packet.position.lerpVectors(link.start, link.endpoint, (time % 1250) / 1250);
     positionLabel(link.marker, link.endpoint);
   }
   const activeLink = links.get(activePath);
   motionMarker.hidden = !activeLink;
   if (activeLink) {
-    markerPosition.lerpVectors(router, activeLink.endpoint, 0.55);
+    markerPosition.lerpVectors(activeLink.start, activeLink.endpoint, 0.55);
     markerPosition.y = 0.47;
     positionLabel(motionMarker, markerPosition);
   }

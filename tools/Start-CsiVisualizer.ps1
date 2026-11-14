@@ -4,12 +4,14 @@ param(
   [string]$Python = 'python',
   [switch]$Observatory,
   [switch]$Standalone,
-  [string]$GatewayPort
+  [string]$GatewayPort,
+  [switch]$MotionModel
 )
 
 $ErrorActionPreference = 'Stop'
 if ($GatewayPort) {
-  '' | & $Python (Join-Path $PSScriptRoot 'csi-visualizer.py') 'Stillpoint-CSI' $GatewayPort --observatory --gateway
+  $modelFlag = @(if ($MotionModel) { '--motion-model' })
+  '' | & $Python (Join-Path $PSScriptRoot 'csi-visualizer.py') 'Stillpoint-CSI' $GatewayPort --observatory --gateway @modelFlag
   exit $LASTEXITCODE
 }
 if ($Standalone) {

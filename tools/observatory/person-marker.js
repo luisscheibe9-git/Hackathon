@@ -23,7 +23,8 @@ const emptyAfterS = Number(params.get("emptyAfter") || 900);
 const showBreathing = params.get("breathing") === "1";
 
 const FALLBACK_THRESHOLD = 0.15; // team change score: walking ~0.19, empty ~0.10, standing ~0.09
-const P_HIGH = 0.7, P_LOW = 0.3;
+export const P_HIGH = 0.7;
+const P_LOW = 0.3;
 const FALL = { burstRatio: 2.5, burstP: 0.95, stillBeforeSuspectS: 2, alertAfterS: demoMode ? 6 : 20 };
 
 // ---------------- presence state machine ----------------
@@ -141,7 +142,7 @@ function el(tag, cls, parent, text) {
   return e;
 }
 
-export function createPersonLayer({ scene, stage, camera, router, positionLabel }) {
+export function createPersonLayer({ scene, stage, positionLabel }) {
   const fig = makeFigure(scene);
   const fsm = new PresenceStateMachine();
   const badge = el("div", "marker person-badge", stage, "PRESENT");
@@ -176,6 +177,7 @@ export function createPersonLayer({ scene, stage, camera, router, positionLabel 
   const zone = new THREE.Vector3();
   const target = new THREE.Vector3();
   let haveZone = false, haloRadius = 1.1, lastTick = performance.now();
+  let lastFrame = null;
   let tip = 0, info = { state: "EMPTY" };
 
   function update(receivers, links, thresholds) {
@@ -186,6 +188,7 @@ export function createPersonLayer({ scene, stage, camera, router, positionLabel 
     for (const r of receivers) {
       const link = links.get(r.port);
       if (!link || r.motion == null) continue;
+      if (r.model_active && r.p_moving == null) continue;
       const thr = thresholds?.get(r.port) ?? FALLBACK_THRESHOLD;
       const ratio = r.motion / thr;
       // disturbance in [0,1]: detector probability if we have it, else motion vs threshold
@@ -203,14 +206,13 @@ export function createPersonLayer({ scene, stage, camera, router, positionLabel 
       target.set(0, 0, 0);
       let w = 0;
       for (const p of agreeing) {
-        const mid = new THREE.Vector3().lerpVectors(router, p.link.endpoint, 0.55);
+        const mid = new THREE.Vector3().lerpVectors(p.link.start, p.link.endpoint, 0.55);
         target.addScaledVector(mid, p.d);
         w += p.d;
       }
       target.multiplyScalar(1 / w);
       target.y = 0;
       if (!haveZone) { zone.copy(target); haveZone = true; }
-      zone.lerp(target, 1 - Math.exp(-dt / 1.0)); // ~1 s smoothing
       haloRadius += ((agreeing.length >= 2 ? 1.1 / Math.sqrt(agreeing.length) : 1.1) - haloRadius) * (1 - Math.exp(-dt));
     }
     if (state === "EMPTY") haveZone = false;
@@ -236,11 +238,15 @@ export function createPersonLayer({ scene, stage, camera, router, positionLabel 
   }
 
   function frame(time) {
+    const dt = lastFrame == null ? 0 : Math.max(0, Math.min(0.1, (time - lastFrame) / 1000));
+    lastFrame = time;
     const s = info.state;
     const show = s !== "EMPTY" && haveZone;
     fig.root.visible = show;
     badge.hidden = caption.hidden = !show;
     if (!show) return;
+    // Finish sliding to the last observed zone even if this motion burst ends.
+    zone.lerp(target, 1 - Math.exp(-dt / 0.22));
     fig.root.position.copy(zone);
     const fallen = s === "FALL_SUSPECTED" || s === "FALL_ALERT";
     tip += ((fallen ? 1 : 0) - tip) * 0.06;
@@ -253,7 +259,7 @@ export function createPersonLayer({ scene, stage, camera, router, positionLabel 
     fig.halo.material.color.setHex(color);
     fig.halo.material.opacity = 0.5 * pulse;
     fig.halo.scale.setScalar(haloRadius);
-    badge.textContent = s === "PRESENT" ? (info.moving ? "PRESENT" : "PRESENT · still") : s === "FALL_ALERT" ? "FALL ALERT" : "FALL SUSPECTED";
+    badge.textContent = s === "PRESENT" ? (info.moving ? "MOTION" : "LAST MOTION") : s === "FALL_ALERT" ? "FALL ALERT" : "FALL SUSPECTED";
     badge.dataset.state = s;
     const head = new THREE.Vector3(zone.x - tip * 1.55, 1.85 - tip * 1.5, zone.z);
     positionLabel(badge, head);
