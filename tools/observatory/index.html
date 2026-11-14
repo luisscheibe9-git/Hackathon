@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stillpoint Observatory</title>
+<link rel="stylesheet" href="./observatory.css">
+<script type="importmap">{"imports":{"three":"./vendor/three.module.min.js"}}</script>
+<script type="module" src="./observatory.js"></script>
+</head>
+<body>
+<main>
+  <header><div><h1>Stillpoint Observatory</h1><p>Live Wi-Fi sensing</p></div><output id="status" role="status">Connecting</output></header>
+  <section class="detection" aria-label="Motion detection">
+    <div><h2 id="motion-status" aria-live="polite">Calibration needed</h2><p id="motion-detail">Clear the room before recording the quiet baseline.</p></div>
+    <button id="calibrate" type="button" disabled>Calibrate empty room</button>
+  </section>
+  <div id="scene" aria-label="Schematic 3D floor showing activity along the router-to-receiver paths">
+    <div id="router" class="marker">Router</div>
+    <div id="markers"></div>
+    <div class="layout">Schematic layout · brighter paths show more CSI change</div>
+  </div>
+  <section id="receivers" aria-label="Receiver telemetry"></section>
+</main>
+</body>
+</html>

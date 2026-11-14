@@ -1,0 +1,89 @@
+#include <WiFi.h>
+#include <esp_wifi.h>
+#include <atomic>
+
+std::atomic<unsigned long> frames{0};
+uint8_t accessPoint[6];
+QueueHandle_t samples;
+
+struct CsiSample {
+  uint32_t timestamp;
+  int8_t rssi;
+  bool firstWordInvalid;
+  uint8_t data[128];
+};
+
+void onCsi(void *, wifi_csi_info_t *info) {
+  if (info && info->buf && info->len >= sizeof(CsiSample::data) &&
+      memcmp(info->mac, accessPoint, 6) == 0) {
+    frames.fetch_add(1, std::memory_order_relaxed);
+    CsiSample sample{info->rx_ctrl.timestamp, info->rx_ctrl.rssi, info->first_word_invalid, {}};
+    memcpy(sample.data, info->buf, sizeof(sample.data));
+    xQueueSend(samples, &sample, 0);
+  }
+}
+
+void setup() {
+  Serial.begin(460800);
+  samples = xQueueCreate(64, sizeof(CsiSample));
+  Serial.setTimeout(2000);
+  WiFi.persistent(false);
+  WiFi.mode(WIFI_STA);
+  WiFi.setSleep(false);
+}
+
+void loop() {
+  if (!Serial.available()) {
+    delay(50);
+    return;
+  }
+  String ssid = Serial.readStringUntil('\n');
+  String password = Serial.readStringUntil('\n');
+  WiFi.begin(ssid.c_str(), password.c_str());
+  password = "";
+  const unsigned long started = millis();
+  while (WiFi.status() != WL_CONNECTED && millis() - started < 25000) {
+    delay(100);
+  }
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.printf("JOIN_FAILED status=%d\n", WiFi.status());
+    WiFi.disconnect();
+    return;
+  }
+
+  Serial.printf("JOINED ip=%s gateway=%s channel=%d rssi=%d\n",
+                WiFi.localIP().toString().c_str(), WiFi.gatewayIP().toString().c_str(),
+                WiFi.channel(), WiFi.RSSI());
+  memcpy(accessPoint, WiFi.BSSID(), sizeof(accessPoint));
+  wifi_csi_config_t config = {};
+  config.lltf_en = true;
+  config.htltf_en = true;
+  config.channel_filter_en = true;
+  const esp_err_t configured = esp_wifi_set_csi_config(&config);
+  const esp_err_t registered = esp_wifi_set_csi_rx_cb(onCsi, nullptr);
+  const esp_err_t enabled = esp_wifi_set_csi(true);
+  if (configured != ESP_OK || registered != ESP_OK || enabled != ESP_OK) {
+    Serial.printf("CSI_INIT_FAILED config=%d callback=%d enable=%d\n", configured, registered, enabled);
+  }
+  unsigned long lastCount = millis();
+  while (WiFi.status() == WL_CONNECTED) {
+    CsiSample sample;
+    if (xQueueReceive(samples, &sample, pdMS_TO_TICKS(20))) {
+      const char digits[] = "0123456789abcdef";
+      char hex[sizeof(sample.data) * 2 + 1];
+      for (size_t i = 0; i < sizeof(sample.data); ++i) {
+        hex[i * 2] = digits[sample.data[i] >> 4];
+        hex[i * 2 + 1] = digits[sample.data[i] & 15];
+      }
+      hex[sizeof(hex) - 1] = '\0';
+      Serial.printf("CSI,%lu,%d,%d,%s\n", (unsigned long)sample.timestamp,
+                    sample.rssi, sample.firstWordInvalid, hex);
+    }
+    if (millis() - lastCount >= 1000) {
+      lastCount = millis();
+      Serial.printf("CSI_FRAMES %lu\n", frames.exchange(0, std::memory_order_relaxed));
+    }
+  }
+  esp_wifi_set_csi(false);
+  xQueueReset(samples);
+}
