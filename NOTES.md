@@ -9,6 +9,7 @@ Hackathon project: 3x ESP32 Wi-Fi CSI sensing to detect falls of elderly residen
 
 ## Current state (2026-11-13)
 - Research done: see `research/` (viability verdict, approach, sources, open questions).
+- [Wi-Fi sensing demo](research/wifi-sensing.md) records reported ESP32-S3 results and reproduction steps.
 - No code yet. `test.txt` and `jack.test` are leftover push-access tests and can be deleted.
 
 ## Decisions

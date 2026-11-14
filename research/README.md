@@ -8,6 +8,7 @@ Background research for the project: **camera-free fall detection for elder care
 | [approach.md](approach.md) | How Wi-Fi CSI sensing works and our proposed technical design |
 | [sources.md](sources.md) | Annotated list of videos, repos and papers |
 | [open-questions.md](open-questions.md) | Things we still need to decide or test |
+| [wifi-sensing.md](wifi-sensing.md) | ESP32-S3 demo results, setup, and reproduction steps |
 
 ## TL;DR
 
