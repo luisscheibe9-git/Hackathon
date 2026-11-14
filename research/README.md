@@ -11,6 +11,8 @@ Background research for the project: **camera-free fall detection for elder care
 | [open-questions.md](open-questions.md) | Things we still need to decide or test |
 | [hackathon-rules.md](hackathon-rules.md) | Event deadlines, required workshops, judging rubric, submission rules, and what they mean for us |
 | [wifi-sensing.md](wifi-sensing.md) | ESP32-S3 demo results, setup, and reproduction steps |
+| [fall-detection-survey.md](fall-detection-survey.md) | Evidence from videos and experiments, hardware choices, and a plan to test tracking and fall alerts |
+| [HUMANRADAR.md](HUMANRADAR.md) | Video demo and hardware architecture, with implications for our Wi-Fi CSI dashboard |
 
 ## TL;DR
 

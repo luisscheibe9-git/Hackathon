@@ -1,0 +1,23 @@
+* { box-sizing: border-box; }
+body { margin: 0; background: #080e17; color: #eaf6ff; font: 15px "Segoe UI", sans-serif; }
+main { max-width: 1420px; padding: 26px clamp(14px, 4vw, 60px); margin: auto; }
+header { display: flex; justify-content: space-between; align-items: center; gap: 14px; margin-bottom: 16px; }
+h1 { margin: 0; font-size: clamp(23px, 4vw, 36px); letter-spacing: -.035em; }
+p { margin: 4px 0 0; color: #a1b8ca; }
+output { color: #94efd4; border: 1px solid #294748; border-radius: 8px; padding: 8px 12px; text-align: center; }
+.detection { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; background: #111c2b; border: 1px solid #263c56; border-radius: 12px; padding: 12px 16px; margin-bottom: 12px; }
+.detection h2 { font-size: 18px; margin: 0; }
+.detection h2[data-active="true"] { color: #94efd4; }
+.detection button { border: 0; border-radius: 8px; background: #94efd4; color: #0c2530; font: inherit; font-weight: 600; padding: 9px 14px; cursor: pointer; }
+.detection button:disabled { opacity: .48; cursor: default; }
+#scene { position: relative; height: clamp(300px, 56vh, 660px); border: 1px solid #263c56; border-radius: 14px; overflow: hidden; background: radial-gradient(ellipse at center, #15283e, #090f19 75%); }
+#scene canvas { display: block; }
+.marker { position: absolute; z-index: 1; transform: translate(-50%, 5px); color: #d0eaff; background: #091221e8; border: 1px solid #36516c; border-radius: 5px; padding: 3px 8px; white-space: nowrap; pointer-events: none; }
+.motion-marker { color: #061b15; background: #94efd4; border-color: #94efd4; transform: translate(-50%, -100%); }
+.layout { position: absolute; left: 14px; bottom: 11px; color: #9bb7ce; font-size: 13px; z-index: 1; }
+#receivers { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 275px), 1fr)); gap: 12px; margin-top: 12px; }
+article { min-width: 0; background: #111c2b; border: 1px solid #263c56; border-radius: 12px; padding: 13px 16px; }
+article header { margin: 0 0 7px; }
+article h2 { font-size: 17px; margin: 0; }
+article span { color: #a1b8ca; font-size: 13px; text-align: right; }
+article canvas { display: block; width: 100%; height: 50px; margin-top: 8px; border-bottom: 1px solid #30475c; }
