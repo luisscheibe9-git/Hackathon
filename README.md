@@ -21,6 +21,8 @@ Add `-Observatory` to the Windows visualizer launcher to open the browser view. 
 
 The 3D floor reuses the MIT-licensed [RuView Observatory floor renderer](https://github.com/ruvnet/RuView/blob/3bae24a1231e0d9809e84eb35edba7231b8d1913/ui/observatory/js/presence-cartography.js) and Three.js 0.160.0. Both licenses are included under `tools/observatory/vendor/`.
 
+Offline replay of a saved CSV (no boards needed): `python detection/replay.py` opens the Observatory with `?replay=1`. See `detection/README.md`.
+
 ## Three ESP32s without a router
 
 Upload `firmware/csi_transmitter/csi_transmitter.ino` to the third board as **ESP32 Dev Module**. It creates the `Stillpoint-CSI` test network on channel 6 and sends packets when a receiver joins. Power the transmitter via USB. Keep the two receivers connected to the PC over USB and running `csi_link_check.ino`. Restart the viewer with `./tools/Start-CsiVisualizer.ps1 -Standalone` (add the applicable `-Ports` and `-Python` options). The PC can stay on its current network. On macOS, add `--external-traffic` to the viewer command, use SSID `Stillpoint-CSI`, and pass the demo password `stillpoint-demo` over stdin.

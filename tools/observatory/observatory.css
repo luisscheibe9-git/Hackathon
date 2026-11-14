@@ -20,3 +20,10 @@ article header { margin: 0 0 7px; }
 article h2 { font-size: 17px; margin: 0; }
 article span { color: #a1b8ca; font-size: 13px; text-align: right; }
 article canvas { display: block; width: 100%; height: 50px; margin-top: 8px; border-bottom: 1px solid #30475c; }
+.replay h2[data-level="moving"] { color: #ffcf6e; }
+.replay h2[data-level="still"] { color: #94efd4; }
+.replay h2[data-level="unknown"] { color: #a1b8ca; }
+.replay-controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.replay-controls input { width: min(360px, 60vw); accent-color: #94efd4; }
+.replay-controls select { background: #0b1522; color: #eaf6ff; border: 1px solid #36516c; border-radius: 6px; padding: 7px; font: inherit; }
+.replay[hidden] { display: none; }

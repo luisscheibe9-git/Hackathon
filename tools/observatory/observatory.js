@@ -24,7 +24,14 @@ const field = new PresenceCartography(scene);
 field.setQuality(0);
 const router = new THREE.Vector3(0, 0.18, -1.8);
 const receiverPositions = [new THREE.Vector3(-1.8, 0.18, 1.55), new THREE.Vector3(1.55, 0.18, 1.55)];
-const colors = [0x51e9c6, 0x8dbaff];
+const colors = [0x51e9c6, 0x8dbaff, 0xffb86b, 0xd99bff, 0xff7f9f];
+// Receivers beyond the first two are spread on an arc opposite the router (schematic only).
+function receiverPosition(index) {
+  if (index < receiverPositions.length) return receiverPositions[index];
+  const angle = Math.PI * (0.15 + 0.7 * ((index - 2) % 5) / 4);
+  return new THREE.Vector3(-2.1 * Math.cos(angle), 0.18, -1.8 + 3.6 * Math.sin(angle));
+}
+const replayMode = new URLSearchParams(location.search).has("replay");
 const wire = new THREE.Mesh(new THREE.SphereGeometry(0.56, 18, 10),
   new THREE.MeshBasicMaterial({ color: 0x617aff, wireframe: true, transparent: true, opacity: 0.32 }));
 wire.position.copy(router);
@@ -97,8 +104,8 @@ function detectMotion(receivers) {
 }
 
 function makeLink(port, index) {
-  const endpoint = receiverPositions[index];
-  const color = colors[index];
+  const endpoint = receiverPosition(index);
+  const color = colors[index % colors.length];
   const material = new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.3 });
   const path = new THREE.Line(new THREE.BufferGeometry().setFromPoints([router, endpoint]), material);
   const packet = new THREE.Mesh(new THREE.SphereGeometry(0.075, 12, 8),
@@ -132,7 +139,8 @@ function updateTrace(link, receiver) {
   link.card.querySelector("span").textContent = message.includes("Access is denied") ? "Serial port in use" :
     message.includes("FileNotFoundError") ? "Board disconnected" : message;
   link.card.querySelector("p").textContent = receiver.motion === null ? "Waiting for live samples" :
-    "CSI " + receiver.motion.toFixed(3) + "   ·   " + receiver.rate.toFixed(1) + " frames/s   ·   " + receiver.rssi + " dBm";
+    "CSI " + receiver.motion.toFixed(3) + "   ·   " + receiver.rate.toFixed(1) + " frames/s   ·   " + receiver.rssi + " dBm" +
+    (receiver.label ? "   ·   model: " + receiver.label + (receiver.p_moving == null ? "" : " (P(moving) " + receiver.p_moving.toFixed(2) + ")") : "");
   const canvas = link.card.querySelector("canvas");
   const ctx = canvas.getContext("2d");
   ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -170,12 +178,13 @@ async function readLive() {
     if (!response.ok) throw new Error(response.status);
     const receivers = await response.json();
     detectMotion(receivers);
-    for (const [index, receiver] of receivers.slice(0, 2).entries()) {
+    for (const [index, receiver] of (replayMode ? receivers : receivers.slice(0, 2)).entries()) {
       if (!links.has(receiver.port)) links.set(receiver.port, makeLink(receiver.port, index));
       updateTrace(links.get(receiver.port), receiver);
     }
     const count = receivers.filter(receiver => receiver.motion !== null).length;
-    status.textContent = count ? count + (count === 1 ? " receiver live" : " receivers live") : "Waiting for CSI";
+    status.textContent = count ? count + (count === 1 ? " receiver" : " receivers") + (replayMode ? " replaying" : " live") : "Waiting for CSI";
+    if (replayMode) await readReplay();
   } catch {
     detectMotion([]);
     for (const [port, link] of links) updateTrace(link, { port, motion: null, status: "Disconnected", samples: [] });
@@ -184,6 +193,35 @@ async function readLive() {
     updateFloor();
     setTimeout(readLive, 300);
   }
+}
+
+// ---- offline replay (detection/replay.py serves /replay/*; live mode never runs this) ----
+const replayBar = document.querySelector("#replay");
+const replaySeek = document.querySelector("#replay-seek");
+const replayToggle = document.querySelector("#replay-toggle");
+let seeking = false;
+function fmt(seconds) { return Math.floor(seconds / 60) + ":" + String(Math.floor(seconds % 60)).padStart(2, "0"); }
+async function replayControl(query) { await fetch("/replay/control?" + query); }
+if (replayMode) {
+  replayBar.hidden = false;
+  document.querySelector("header p").textContent = "Offline replay of a saved CSI recording";
+  replayToggle.addEventListener("click", () => replayControl("cmd=" + (replayToggle.textContent === "Pause" ? "pause" : "play")));
+  replaySeek.addEventListener("input", () => { seeking = true; });
+  replaySeek.addEventListener("change", () => { seeking = false; replayControl("cmd=seek&t=" + replaySeek.value); });
+  document.querySelector("#replay-speed").addEventListener("change", (e) => replayControl("speed=" + e.target.value));
+}
+async function readReplay() {
+  const state = await (await fetch("/replay/state")).json();
+  const verdict = document.querySelector("#replay-verdict");
+  verdict.textContent = state.verdict;
+  verdict.dataset.level = state.verdict.startsWith("Likely") ? "moving" : state.verdict.startsWith("No movement") ? "still" : "unknown";
+  const paths = state.paths.map(p => p.port + " " + (p.p_moving == null ? "n/a" : p.p_moving.toFixed(2))).join(" · ");
+  document.querySelector("#replay-detail").textContent = fmt(state.t) + " / " + fmt(state.duration) +
+    "   ·   recorded: " + (state.truth || "gap") + "   ·   P(moving) per path: " + paths;
+  replayToggle.textContent = state.playing ? "Pause" : "Play";
+  replaySeek.max = state.duration;
+  if (!seeking) replaySeek.value = state.t;
+  for (const [port, link] of links) link.card.style.borderColor = state.top === port && state.verdict.startsWith("Likely") ? "#ffcf6e" : "";
 }
 
 new ResizeObserver(() => {
