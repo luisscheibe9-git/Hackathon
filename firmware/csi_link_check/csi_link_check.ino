@@ -6,6 +6,7 @@
 std::atomic<unsigned long> frames{0};
 uint8_t accessPoint[6];
 QueueHandle_t samples;
+const char *standaloneSsid = "Stillpoint-CSI";
 
 struct CsiSample {
   uint32_t timestamp;
@@ -34,12 +35,13 @@ void setup() {
 }
 
 void loop() {
-  if (!Serial.available()) {
-    delay(50);
-    return;
+  const unsigned long listenUntil = millis() + 3000;
+  while (!Serial.available() && (long)(listenUntil - millis()) > 0) {
+    delay(20);
   }
-  String ssid = Serial.readStringUntil('\n');
-  String password = Serial.readStringUntil('\n');
+  const bool configuredOverUsb = Serial.available();
+  String ssid = configuredOverUsb ? Serial.readStringUntil('\n') : standaloneSsid;
+  String password = configuredOverUsb ? Serial.readStringUntil('\n') : "stillpoint-demo";
   WiFi.begin(ssid.c_str(), password.c_str());
   password = "";
   const unsigned long started = millis();
@@ -68,10 +70,12 @@ void loop() {
   }
   unsigned long lastCount = millis();
   unsigned long lastProbe = millis();
-  const bool standalone = ssid == "Stillpoint-CSI";
+  const bool standalone = ssid == standaloneSsid;
   WiFiUDP probe;
+  uint8_t relay[136] = {'C'};
   if (standalone) {
     probe.begin(50001);
+    esp_wifi_get_mac(WIFI_IF_STA, relay + 1);
   }
   while (WiFi.status() == WL_CONNECTED) {
     if (standalone && millis() - lastProbe >= 35) {
@@ -80,12 +84,23 @@ void loop() {
         probe.write(reinterpret_cast<const uint8_t *>("CSI"), 3);
         probe.endPacket();
       }
-      if (probe.parsePacket() > 0) {
+      while (probe.parsePacket() > 0) {
         probe.clear();
       }
     }
     CsiSample sample;
     if (xQueueReceive(samples, &sample, pdMS_TO_TICKS(20))) {
+      if (standalone) {
+        relay[7] = static_cast<uint8_t>(sample.rssi);
+        memcpy(relay + 8, sample.data, sizeof(sample.data));
+        if (probe.beginPacket(WiFi.gatewayIP(), 50000)) {
+          probe.write(relay, sizeof(relay));
+          probe.endPacket();
+        }
+      }
+      if (!configuredOverUsb) {
+        continue;
+      }
       const char digits[] = "0123456789abcdef";
       char hex[sizeof(sample.data) * 2 + 1];
       for (size_t i = 0; i < sizeof(sample.data); ++i) {

@@ -19,6 +19,7 @@ import serial
 
 FRAME = re.compile(rb"CSI,\d+,(-?\d+),[01],([0-9a-f]{256})")
 JOIN = re.compile(rb"JOINED ip=([\d.]+) .*channel=(\d+) rssi=-?\d+")
+RELAY = re.compile(rb"RELAY,([0-9a-f]{12}),(-?\d+),([0-9a-f]{256})")
 
 
 def amplitude(raw):
@@ -82,6 +83,34 @@ def read_board(port_name, network, password, updates, stop, external_traffic=Fal
         updates.put((port_name, "status", str(error)))
 
 
+def read_gateway(port, updates, stop):
+    while not stop.is_set():
+        try:
+            with serial.Serial(port, 460800, timeout=0.2) as connection:
+                previous = {}
+                pending = bytearray()
+                while not stop.is_set():
+                    pending.extend(connection.read(connection.in_waiting or 1))
+                    while b"\n" in pending:
+                        raw, _, pending = pending.partition(b"\n")
+                        frame = RELAY.fullmatch(raw.strip())
+                        if not frame:
+                            continue
+                        current = amplitude(frame[3])
+                        if current is None:
+                            continue
+                        receiver = "RX " + frame[1].decode()[-6:].upper()
+                        if receiver in previous:
+                            change = sum(abs(a - b) for a, b in zip(current, previous[receiver]))
+                            updates.put((receiver, "frame", (time.monotonic(), change, int(frame[2]))))
+                        previous[receiver] = current
+                    if len(pending) > 2048:
+                        pending.clear()
+        except (OSError, serial.SerialException) as error:
+            print(f"Gateway {port}: {error}", flush=True)
+            stop.wait(3)
+
+
 def run_observatory(ports, updates, stop, external_traffic=False):
     frames = {port: deque(maxlen=3500) for port in ports}
     status = dict.fromkeys(ports, "Connecting")
@@ -116,6 +145,11 @@ def run_observatory(ports, updates, stop, external_traffic=False):
                 while not updates.empty():
                     port, kind, value = updates.get()
                     if kind == "frame":
+                        if port not in frames:
+                            if len(frames) >= 2:
+                                continue
+                            frames[port] = deque(maxlen=3500)
+                            status[port] = "Waiting for CSI"
                         frames[port].append(value)
                     else:
                         status[port] = value
@@ -149,12 +183,25 @@ def main():
     parser.add_argument("network")
     parser.add_argument("ports", nargs="+")
     parser.add_argument("--observatory", action="store_true")
+    parser.add_argument("--gateway", action="store_true",
+                        help="Read wireless receiver samples from one transmitter USB port.")
     parser.add_argument("--external-traffic", action="store_true",
                         help="Use packets from a dedicated transmitter instead of host probes.")
     args = parser.parse_args()
+    if args.gateway and (not args.observatory or len(args.ports) != 1):
+        parser.error("--gateway requires --observatory and exactly one USB port")
     password = input().rstrip("\r\n")
     updates = queue.SimpleQueue()
     stop = threading.Event()
+    if args.gateway:
+        threading.Thread(target=read_gateway, args=(args.ports[0], updates, stop), daemon=True).start()
+        try:
+            run_observatory([], updates, stop, external_traffic=True)
+        except KeyboardInterrupt:
+            pass
+        finally:
+            stop.set()
+        return
     if args.observatory:
         for port in args.ports:
             threading.Thread(target=reconnect_board,

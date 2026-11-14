@@ -19,6 +19,8 @@ Hackathon project: 3x ESP32 Wi-Fi CSI sensing to detect falls of elderly residen
 - The local browser Observatory reuses RuView's 3D floor and shows CSI changes along a schematic of the receiver paths. Start it with the visualizer launcher's `-Observatory` flag. See README for Windows and macOS usage.
 - The Observatory can calibrate a quiet baseline per receiver and show motion above it. The indicator still needs an in-room test.
 - Router-free mode is verified with COM6 transmitting and COM4 receiving about 20 CSI frames/sec. COM5 was unplugged during the test and still needs the updated receiver firmware and a simultaneous capture. See README for the `-Standalone` launch.
+- One-USB gateway mode verified CSI relaying from receiver 9F1D98 to COM6. The laptop opened only COM6. Receiver 9F1D98 still drew power from laptop USB during this test. COM5 needs flashing and a simultaneous test.
+- For a moving person marker, fix all three antenna positions, tag several marked spots and walking routes in the triangle, then test a position model on separate walking passes. The current two sensing paths report motion. Evaluate a third receiver-to-receiver path if locations remain ambiguous.
 - Replacement board (ESP32 MAC ending 9F:1D:98) worked on COM4. Saved the original flash regions affected by the upload in `%LOCALAPPDATA%/Stillpoint/firmware-backups/`, flashed at 230400 baud, and verified about 29.5 frames/sec in the Observatory. Higher-speed backup transfers failed. The other board previously showed USB descriptor errors.
 - `test.txt` and `jack.test` are leftover push-access tests and can be deleted.
 
