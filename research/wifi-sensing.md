@@ -2,6 +2,8 @@
 
 Reviewed November 13, 2026. This note records Better Stack’s demo and the published kit documentation. The performance figures are the creator’s measurements. We have yet to reproduce the experiment in this project.
 
+> **Note for our hardware:** this demo and kit need ESP32-S3 boards. We have 3x ESP32-U (original ESP32 chip), which RuView and this kit don't support, so we can't reproduce it as-is. We use espressif/esp-csi instead (see [approach.md](approach.md)). The method (camera-labeled training, then CSI-only classification) still applies.
+
 ## What the demo did
 
 Wi-Fi packets travel along multiple paths as they reflect off people, furniture, and walls. Channel state information (CSI) measures how the received signal changes across frequency subcarriers. The demo used three roughly $10 ESP32-S3 boards running patched RuView firmware. The boards collected nine sensing links in total, including links from the router and between the boards. [How sensing works](https://www.youtube.com/watch?v=9Tihk9_jUyo&t=73s) · [Board setup](https://www.youtube.com/watch?v=9Tihk9_jUyo&t=241s)
