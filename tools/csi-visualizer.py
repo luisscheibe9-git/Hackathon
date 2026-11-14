@@ -82,7 +82,7 @@ def read_board(port_name, network, password, updates, stop, external_traffic=Fal
         updates.put((port_name, "status", str(error)))
 
 
-def run_observatory(ports, updates, stop):
+def run_observatory(ports, updates, stop, external_traffic=False):
     frames = {port: deque(maxlen=3500) for port in ports}
     status = dict.fromkeys(ports, "Connecting")
     state = b"[]"
@@ -94,6 +94,7 @@ def run_observatory(ports, updates, stop):
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Cache-Control", "no-store")
+                self.send_header("X-Stillpoint-Source", "esp32" if external_traffic else "router")
                 self.send_header("Content-Length", str(len(payload)))
                 self.end_headers()
                 self.wfile.write(payload)
@@ -160,7 +161,7 @@ def main():
                              args=(port, args.network, password, updates, stop, args.external_traffic),
                              daemon=True).start()
         try:
-            run_observatory(args.ports, updates, stop)
+            run_observatory(args.ports, updates, stop, args.external_traffic)
         except KeyboardInterrupt:
             pass
         finally:

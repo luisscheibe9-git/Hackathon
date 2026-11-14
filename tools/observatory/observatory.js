@@ -7,6 +7,7 @@ const status = document.querySelector("#status");
 const motionStatus = document.querySelector("#motion-status");
 const motionDetail = document.querySelector("#motion-detail");
 const calibrate = document.querySelector("#calibrate");
+const transmitterLabel = document.querySelector("#transmitter");
 let renderer;
 try {
   renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
@@ -63,7 +64,7 @@ function detectMotion(receivers) {
   if (calibration) {
     if (now < calibration.start) {
       motionStatus.textContent = "Leave the room in " + Math.ceil((calibration.start - now) / 1000) + "s";
-      motionDetail.textContent = "Keep the router and ESP32s fixed.";
+      motionDetail.textContent = "Keep the transmitter and receivers fixed.";
       return;
     }
     if (now < calibration.end) {
@@ -181,6 +182,9 @@ async function readLive() {
   try {
     const response = await fetch("/live", { signal: AbortSignal.timeout(2000) });
     if (!response.ok) throw new Error(response.status);
+    const source = response.headers.get("X-Stillpoint-Source");
+    transmitterLabel.textContent = source === "esp32" ? "ESP32 transmitter" :
+      source === "router" ? "Wi-Fi router" : "Wi-Fi transmitter";
     const receivers = await response.json();
     detectMotion(receivers);
     for (const [index, receiver] of receivers.slice(0, 2).entries()) {
@@ -212,7 +216,7 @@ new ResizeObserver(() => {
 
 renderer.setAnimationLoop((time) => {
   wire.rotation.y = time / 2200;
-  positionLabel(document.querySelector("#router"), wire.position);
+  positionLabel(transmitterLabel, wire.position);
   for (const link of links.values()) {
     link.packet.position.lerpVectors(router, link.endpoint, (time % 1250) / 1250);
     positionLabel(link.marker, link.endpoint);
