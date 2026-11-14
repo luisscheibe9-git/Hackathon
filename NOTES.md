@@ -13,6 +13,7 @@ Hackathon project: 3x ESP32 Wi-Fi CSI sensing to detect falls of elderly residen
 - No code yet. `test.txt` and `jack.test` are leftover push-access tests and can be deleted.
 
 - Team to-do list with owners and deadlines (presentation, hardware, software/AI, dashboard, website, submission): Google Doc "Hackathon ideas", https://docs.google.com/document/d/1upIEmQUVUbZdIuxvN-gHEJgOShMZMWAb9dQ6_YxRwJs/edit (To DO LIST section). Keep tasks there, not in the repo.
+- Shared Google Drive folder "Hackathon" (editors: Anthony, Jack): https://drive.google.com/drive/folders/1IWIpqnB7UojHoDrU4_enAqYaaRD2JUB3
 
 ## Decisions
 - Goal is a product to sell to nursing homes; the hackathon is the first demo. See `research/product.md` (market, competitors, product requirements).
