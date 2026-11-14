@@ -24,3 +24,4 @@ Background research for the project: **camera-free fall detection for elder care
 ## Adding research
 
 Add a new `.md` file here or append to `sources.md` with: link, one-line summary, and what it means for us. Keep big PDFs out of the repo; link them instead.
+- [bom-cost.md](bom-cost.md): bulk hardware cost per Haven node and kit, power options.
