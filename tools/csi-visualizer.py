@@ -48,8 +48,9 @@ def read_board(port_name, network, password, updates, stop, external_traffic=Fal
             next_packet = 0.0
             while not stop.is_set():
                 now = time.monotonic()
-                if target is None and now > deadline:
-                    raise RuntimeError("No network connection reported")
+                if now > deadline:
+                    raise RuntimeError("No network connection reported" if target is None else
+                                       "No CSI frames recently. Reconnecting.")
                 if target and not external_traffic and now >= next_packet:
                     traffic.sendto(b"CSI", target)
                     next_packet = now + 0.035
@@ -61,11 +62,13 @@ def read_board(port_name, network, password, updates, stop, external_traffic=Fal
                     joined = JOIN.fullmatch(line)
                     if joined:
                         target = (joined[1].decode(), 50000)
+                        deadline = time.monotonic() + 12
                         updates.put((port_name, "status", f"Channel {joined[2].decode()} · waiting for CSI"))
                     if line.startswith((b"JOIN_FAILED", b"CSI_INIT_FAILED")):
                         raise RuntimeError(line.decode())
                     frame = FRAME.fullmatch(line)
                     if frame:
+                        deadline = time.monotonic() + 12
                         current = amplitude(frame[2])
                         if current is None:
                             continue

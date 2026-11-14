@@ -37,12 +37,20 @@ let calibration = null;
 let thresholds = new Map();
 let livePorts = [];
 let lastMotion = -Infinity;
+let activePath = null;
+const motionMarker = document.createElement("div");
+motionMarker.className = "marker motion-marker";
+motionMarker.hidden = true;
+motionMarker.textContent = "Motion on this path";
+stage.append(motionMarker);
+const markerPosition = new THREE.Vector3();
 
 calibrate.addEventListener("click", () => {
   const start = performance.now() + 7000;
   calibration = { start, end: start + 12000, byPort: new Map(livePorts.map(port => [port, []])) };
   thresholds = new Map();
   lastMotion = -Infinity;
+  activePath = null;
   calibrate.disabled = true;
 });
 
@@ -82,18 +90,23 @@ function detectMotion(receivers) {
   const calibrated = live.filter(({ port }) => thresholds.has(port));
   const active = calibrated.filter(({ port, motion }) => motion >= thresholds.get(port));
   if (!calibrated.length) {
+    activePath = null;
     motionStatus.textContent = thresholds.size ? "Motion status unavailable" : "Calibration needed";
     motionDetail.textContent = "Clear the room before recording the quiet baseline.";
     return;
   }
   if (active.length) {
     lastMotion = now;
+    activePath = active.length === 1 ? active[0].port : null;
     motionDetail.textContent = "Activity above the quiet baseline on " + active.map(({port}) => port).join(" and ") + ".";
   }
   const moving = now - lastMotion < 1300;
   motionStatus.dataset.active = String(moving);
   motionStatus.textContent = moving ? "Motion detected" : "No motion detected";
-  if (!moving) motionDetail.textContent = "Occupancy is unknown when someone is still.";
+  if (!moving) {
+    activePath = null;
+    motionDetail.textContent = "Occupancy is unknown when someone is still.";
+  }
 }
 
 function makeLink(port, index) {
@@ -203,6 +216,13 @@ renderer.setAnimationLoop((time) => {
   for (const link of links.values()) {
     link.packet.position.lerpVectors(router, link.endpoint, (time % 1250) / 1250);
     positionLabel(link.marker, link.endpoint);
+  }
+  const activeLink = links.get(activePath);
+  motionMarker.hidden = !activeLink;
+  if (activeLink) {
+    markerPosition.lerpVectors(router, activeLink.endpoint, 0.55);
+    markerPosition.y = 0.47;
+    positionLabel(motionMarker, markerPosition);
   }
   renderer.render(scene, camera);
 });

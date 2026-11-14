@@ -18,7 +18,7 @@ Hackathon project: 3x ESP32 Wi-Fi CSI sensing to detect falls of elderly residen
 - Both ESP32-WROOM-32U receivers (COM4 and COM5) streamed together on channel 1. The desktop visualizer plots live CSI change by receiver. Next, place the second board at a different angle and compare responses along both paths.
 - The local browser Observatory reuses RuView's 3D floor and shows CSI changes along a schematic of the receiver paths. Start it with the visualizer launcher's `-Observatory` flag. See README for Windows and macOS usage.
 - The Observatory can calibrate a quiet baseline per receiver and show motion above it. The indicator still needs an in-room test.
-- Router-free mode uses a third ESP32 as a dedicated access point and transmitter. See README for the `-Standalone` launch. The three-board live test is pending the third board.
+- Router-free mode is verified with COM6 transmitting and COM4 receiving about 20 CSI frames/sec. COM5 was unplugged during the test and still needs the updated receiver firmware and a simultaneous capture. See README for the `-Standalone` launch.
 - Replacement board (ESP32 MAC ending 9F:1D:98) worked on COM4. Saved the original flash regions affected by the upload in `%LOCALAPPDATA%/Stillpoint/firmware-backups/`, flashed at 230400 baud, and verified about 29.5 frames/sec in the Observatory. Higher-speed backup transfers failed. The other board previously showed USB descriptor errors.
 - `test.txt` and `jack.test` are leftover push-access tests and can be deleted.
 

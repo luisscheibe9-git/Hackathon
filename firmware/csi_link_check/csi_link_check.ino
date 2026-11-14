@@ -1,4 +1,5 @@
 #include <WiFi.h>
+#include <WiFiUdp.h>
 #include <esp_wifi.h>
 #include <atomic>
 
@@ -66,7 +67,23 @@ void loop() {
     Serial.printf("CSI_INIT_FAILED config=%d callback=%d enable=%d\n", configured, registered, enabled);
   }
   unsigned long lastCount = millis();
+  unsigned long lastProbe = millis();
+  const bool standalone = ssid == "Stillpoint-CSI";
+  WiFiUDP probe;
+  if (standalone) {
+    probe.begin(50001);
+  }
   while (WiFi.status() == WL_CONNECTED) {
+    if (standalone && millis() - lastProbe >= 35) {
+      lastProbe = millis();
+      if (probe.beginPacket(WiFi.gatewayIP(), 50000)) {
+        probe.write(reinterpret_cast<const uint8_t *>("CSI"), 3);
+        probe.endPacket();
+      }
+      if (probe.parsePacket() > 0) {
+        probe.clear();
+      }
+    }
     CsiSample sample;
     if (xQueueReceive(samples, &sample, pdMS_TO_TICKS(20))) {
       const char digits[] = "0123456789abcdef";

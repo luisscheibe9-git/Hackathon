@@ -24,3 +24,5 @@ The 3D floor reuses the MIT-licensed [RuView Observatory floor renderer](https:/
 ## Three ESP32s without a router
 
 Upload `firmware/csi_transmitter/csi_transmitter.ino` to the third board as **ESP32 Dev Module**. It creates the `Stillpoint-CSI` test network on channel 6 and sends packets when a receiver joins. Power the transmitter via USB. Keep the two receivers connected to the PC over USB and running `csi_link_check.ino`. Restart the viewer with `./tools/Start-CsiVisualizer.ps1 -Standalone` (add the applicable `-Ports` and `-Python` options). The PC can stay on its current network. On macOS, add `--external-traffic` to the viewer command, use SSID `Stillpoint-CSI`, and pass the demo password `stillpoint-demo` over stdin.
+
+The receivers send UDP probes over the private ESP32 network and the transmitter replies to each receiver directly. The [classic ESP32 human sensing project](https://github.com/everythingfreee/ESP32-WiFi-CSI-Human-Sensing) demonstrates a similar probe-and-echo setup and is a reference for approximate position after calibration.
