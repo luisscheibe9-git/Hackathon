@@ -13,9 +13,10 @@ Hackathon project: 3x ESP32 Wi-Fi CSI sensing to detect falls of elderly residen
 - No code yet. `test.txt` and `jack.test` are leftover push-access tests and can be deleted.
 
 ## Decisions
+- Goal is a product to sell to nursing homes; the hackathon is the first demo. See `research/product.md` (market, competitors, product requirements).
 - Scope: fall detection + zone-level location. Not precise tracking or room mapping.
 - Use CSI, not RSSI.
-- Base: RuView if boards are ESP32-S3/C6, otherwise espressif/esp-csi + own Python pipeline.
+- Hardware: 3x ESP32-U (original ESP32, external antenna). RuView doesn't support it → base is espressif/esp-csi + own Python pipeline.
 - Presence state machine to stop "person lying still" from reading as "empty room".
 
 ## Next steps

@@ -47,6 +47,16 @@ Because someone lying still can't "leave", stillness after a spike stays a fall 
 
 Record at the venue, ~10 min each: empty room, walking, sitting down, lying down slowly, falls onto a mattress (several people, several spots). Keep a held-out recording to report honest accuracy.
 
+## Our hardware: 3x ESP32-U
+
+The "U" boards have the **original ESP32 chip** with a **U.FL connector for an external antenna** (no PCB antenna).
+
+- **RuView does not support the original ESP32** → we use **esp-csi** plus our own Python pipeline.
+- Espressif ranks CSI quality C5 > C6 > C3 ≈ S3 > original ESP32. Ours is lowest but still works; fine for motion/fall signals.
+- **Each board needs an antenna attached** or Wi-Fi will be very weak.
+- External antennas are a plus: we can position and aim them independently of the board, and the board can sit in an enclosure (good for a product).
+- Upgrade path for a product: ESP32-C5/C6 (better CSI, cheap).
+
 ## Candidate bases
 
 | Option | Pros | Cons |
