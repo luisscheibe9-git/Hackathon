@@ -1,0 +1,36 @@
+# Haven ESP32 sensing: copy to config.yaml (git-ignored) and fill in.
+
+wifi:
+  ssid: "YourNetwork"                    # 2.4 GHz only: the ESP32 has no 5 GHz radio
+  password_file: "~/.haven-wifi-pass"    # plain text file with only the password (chmod 600); empty file = open network
+
+host:
+  ip: auto                               # this computer's LAN IP, the boards' UDP target ("auto" detects it)
+  udp_port: 5005
+  http_port: 8940                        # http://127.0.0.1:8940  (live view)  and  /train.html  (webcam teacher)
+
+# One entry per ESP32-WROOM-32U. `python tools/haven_fw.py discover` prints the MACs of the boards on USB.
+boards:
+  - { id: 1, mac: "aa:bb:cc:dd:ee:01", name: "bedside" }
+  - { id: 2, mac: "aa:bb:cc:dd:ee:02", name: "door" }
+  - { id: 3, mac: "aa:bb:cc:dd:ee:03", name: "window" }
+
+# Optional: only needed if you mix in ESP32-S3 boards running RuView + wifi-sensing-kit firmware.
+# Haven firmware flags router frames itself.
+# router_bssid: "aa:bb:cc:dd:ee:ff"
+
+firmware:
+  idf_path: "~/esp/esp-idf"              # ESP-IDF v5.4+ (v5.5.6 tested for the build)
+  stream: udp                            # udp | serial | both  (serial: plug the node into this computer, run server.py --serial PORT)
+  ping_hz: 50                            # gateway pings per second (CSI traffic)
+  link_hz: 50                            # max CSI frames per second kept per transmitter
+  # tx_power_dbm: 8                      # lower TX power for short-range bench tests; omit for the driver default
+
+room:
+  name: "Room 104"                       # room number only: no resident names
+
+detection:
+  long_lie_seconds: 10                   # demo value; a real deployment would use minutes
+  recover_seconds: 3                     # standing/walking this long ends a fall episode
+  drop_seconds: 2.5                      # active -> lying faster than this counts as a possible fall
+  alert_on_any_lying: false              # also alert when someone lies down slowly (no fall detected)

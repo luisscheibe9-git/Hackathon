@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Haven Live Room</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  .state { padding: 22px; border-radius: 12px; background: var(--accent-soft); }
+  .state h3 { margin: 0; font-size: 30px; letter-spacing: .3px; }
+  .state p { margin: 6px 0 0; }
+  .state.fall_suspected { background: var(--warn-soft); }
+  .state.fall_suspected h3 { color: var(--warn); }
+  .state.alert { background: var(--alert-soft); animation: pulse 1.2s infinite; }
+  .state.alert h3 { color: var(--alert); }
+  .state.nosignal { background: var(--line); }
+  @keyframes pulse { 50% { filter: brightness(1.06); } }
+  .timer { font: 600 44px/1 var(--mono); margin-top: 10px; }
+  .probs .row { margin: 6px 0; } .probs .row span:first-child { width: 80px; } .probs .bar { flex: 1; }
+  .links { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; }
+  .link { border: 1px solid var(--line); border-radius: 10px; padding: 10px; }
+  .link b { font-family: var(--mono); }
+  ul.events { list-style: none; padding: 0; margin: 0; font-size: 13px; }
+  ul.events li { padding: 5px 0; border-bottom: 1px solid var(--line); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Haven <em>live</em></h1>
+  <nav><a class="on" href="/">Live room</a><a href="/train.html">Train with webcam</a></nav>
+  <span id="mode" class="badge off">NO SIGNAL</span>
+  <span class="muted small" id="room"></span>
+</header>
+<main>
+  <div class="grid">
+    <section class="card" style="grid-column: span 2; min-width: 300px">
+      <h2>Room status · WiFi only, no camera</h2>
+      <div id="state" class="state nosignal"><h3>Waiting for sensors</h3><p class="muted">Start the ESP32 nodes; frames appear here as soon as they arrive.</p></div>
+      <div class="row" style="margin-top:12px">
+        <button id="ack" disabled>Acknowledge alert</button>
+        <span class="muted small" id="model"></span>
+      </div>
+    </section>
+    <section class="card probs">
+      <h2>Activity estimate</h2>
+      <div id="probs" class="muted small">No model yet: record training data on the <a href="/train.html">webcam page</a>.</div>
+    </section>
+  </div>
+  <div class="grid" style="margin-top:16px">
+    <section class="card" style="grid-column: span 2; min-width: 300px">
+      <h2>Sensing links</h2>
+      <div id="links" class="links muted small">No CSI frames yet.</div>
+    </section>
+    <section class="card">
+      <h2>Events</h2>
+      <ul id="events" class="events"><li class="muted">None yet.</li></ul>
+    </section>
+  </div>
+  <p class="muted small" style="margin-top:20px">Prototype. Not a medical device. Detects possible falls and alerts staff faster; it does not prevent falls.</p>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const NAMES = { empty: "Room empty", active: "Person moving", lying: "Lying down", fall_suspected: "Possible fall", alert: "FALL ALERT", unknown: "Starting…" };
+let boards = {};
+const linkName = k => { const [a, b] = k.split(">"); const n = x => x === "R" ? "router" : (boards[x] || "node " + x); return `${n(a)} → ${n(b)}`; };
+const fmt = s => s == null ? "–" : s < 60 ? `${Math.floor(s)}s` : `${Math.floor(s / 60)}m ${String(Math.floor(s % 60)).padStart(2, "0")}s`;
+const clock = t => new Date(t * 1000).toLocaleTimeString();
+
+function drawShape(cv, shape) {
+  const c = cv.getContext("2d"), w = cv.width, h = cv.height;
+  c.clearRect(0, 0, w, h);
+  if (!shape.length) return;
+  const max = Math.max(...shape, 1), bw = w / shape.length;
+  c.fillStyle = getComputedStyle(document.body).getPropertyValue("--accent");
+  shape.forEach((v, i) => { const bh = (v / max) * (h - 2); c.fillRect(i * bw, h - bh, Math.max(1, bw - 1), bh); });
+}
+
+async function tick() {
+  let s;
+  try { s = await (await fetch("/api/state")).json(); } catch { $("mode").textContent = "SERVER OFFLINE"; return; }
+  boards = s.boards; const L = s.live;
+  $("mode").textContent = L.mode === "LIVE" ? "LIVE" : "NO SIGNAL";
+  $("mode").className = "badge " + (L.mode === "LIVE" ? "live" : "off");
+  $("room").textContent = L.room;
+  const st = $("state");
+  if (L.mode !== "LIVE") {
+    st.className = "state nosignal"; st.innerHTML = "<h3>No sensor signal</h3><p class='muted'>No CSI frames in the last 2 s. Check that the nodes are powered and streaming to this computer.</p>";
+  } else if (!L.model_trained) {
+    st.className = "state"; st.innerHTML = "<h3>Sensors live, model not trained</h3><p class='muted'>Record training data with the webcam teacher to enable activity and fall detection.</p>";
+  } else {
+    st.className = "state " + L.state;
+    let html = `<h3>${NAMES[L.state] || L.state}</h3>`;
+    if (L.state === "active" && L.activity) html += `<p>${L.activity} · for ${fmt(L.for_s)}</p>`;
+    else if (L.state === "alert" || L.state === "fall_suspected") {
+      html += `<p>${L.room} · possible fall at ${clock(L.fall_time || L.since)}${L.acknowledged ? " · acknowledged" : ""}</p>`;
+      html += `<div class="timer">${fmt(L.on_floor_s)}</div><p class="muted small">on the floor without getting up (alert after ${L.long_lie_s}s)</p>`;
+    } else html += `<p class="muted">for ${fmt(L.for_s)}</p>`;
+    st.innerHTML = html;
+  }
+  $("ack").disabled = !(L.state === "alert" && !L.acknowledged);
+  const d = s.data;
+  $("model").textContent = d.trained
+    ? `Model: ${Object.values(d.counts.train || {}).reduce((a, b) => a + b, 0)} training windows` + (d.test ? ` · test-session accuracy ${(100 * d.test.acc).toFixed(0)}%` : " · no test session yet")
+    : "";
+  const e = s.estimate;
+  if (e && e.probs) {
+    $("probs").innerHTML = Object.entries(e.probs).sort((a, b) => b[1] - a[1]).map(([k, v]) =>
+      `<div class="row"><span>${k}</span><div class="bar"><i style="width:${(100 * v).toFixed(0)}%"></i></div><span class="mono small">${(100 * v).toFixed(0)}%</span></div>`).join("");
+  } else if (e && e.status) $("probs").textContent = e.status + (e.missing && e.missing.length ? ": " + e.missing.join(", ") : "");
+  const keys = Object.keys(s.links);
+  if (keys.length) {
+    const box = $("links");
+    if (box.dataset.keys !== keys.join()) {
+      box.dataset.keys = keys.join(); box.classList.remove("muted", "small");
+      box.innerHTML = keys.map(k => `<div class="link"><b>${k}</b> <span class="muted small">${linkName(k)}</span><canvas width="170" height="40" data-k="${k}"></canvas><div class="small muted" data-i="${k}"></div></div>`).join("");
+    }
+    for (const k of keys) {
+      const l = s.links[k];
+      drawShape(box.querySelector(`canvas[data-k="${k}"]`), l.shape);
+      box.querySelector(`[data-i="${k}"]`).textContent = `${l.pps.toFixed(0)} frames/s · RSSI ${l.rssi ?? "–"} · motion ${l.motion.toFixed(3)}`;
+    }
+  }
+  if (L.events.length) $("events").innerHTML = L.events.map(ev => `<li><span class="mono">${clock(ev.t)}</span> ${NAMES[ev.state] || ev.state}${ev.note ? " · " + ev.note : ""}</li>`).join("");
+}
+$("ack").onclick = () => fetch("/api/ack", { method: "POST", body: "{}" });
+tick(); setInterval(tick, 500);
+</script>
+</body>
+</html>

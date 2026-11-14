@@ -1,0 +1,41 @@
+menu "Haven CSI node"
+
+config HAVEN_LED_GPIO
+    int "Status LED GPIO (-1 = none)"
+    default 2
+    range -1 39
+    help
+        Most ESP32-WROOM-32U dev boards have a blue LED on GPIO 2. Set -1 if yours has none.
+
+config HAVEN_LED_ACTIVE_HIGH
+    bool "Status LED is active high"
+    default y
+
+config HAVEN_TARGET_PORT
+    int "Default host UDP port"
+    default 5005
+
+config HAVEN_PING_HZ
+    int "Default gateway ping rate (Hz)"
+    default 50
+    range 5 100
+    help
+        The node pings its Wi-Fi gateway so the router (and every other node, which overhears the
+        traffic) always has OFDM frames to measure. Override per board with provisioning.
+
+config HAVEN_LINK_HZ
+    int "Default max CSI frames per second per transmitter"
+    default 50
+    range 5 100
+
+config HAVEN_TOTAL_HZ
+    int "Max CSI frames per second in total"
+    default 150
+    range 10 300
+
+config HAVEN_MAX_PEERS
+    int "Max peer boards in the link allow-list"
+    default 8
+    range 1 16
+
+endmenu

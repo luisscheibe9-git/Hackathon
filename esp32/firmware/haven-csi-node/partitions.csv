@@ -1,0 +1,6 @@
+# Haven CSI node: fits any ESP32 with >= 2 MB flash (WROOM-32U ships with 4 MB).
+# NVS at 0x9000 holds Wi-Fi and node settings written by tools/haven_fw.py provision.
+# Name,   Type, SubType, Offset,  Size
+nvs,      data, nvs,     0x9000,  0x6000
+phy_init, data, phy,     0xf000,  0x1000
+factory,  app,  factory, 0x10000, 0x180000
