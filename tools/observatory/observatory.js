@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { PresenceCartography } from "./vendor/presence-cartography.js";
+import { createPersonLayer, demoMode, demoReceivers } from "./person-marker.js";
 
 const scene = new THREE.Scene();
 const stage = document.querySelector("#scene");
@@ -52,6 +53,8 @@ motionMarker.hidden = true;
 motionMarker.textContent = "Motion on this path";
 stage.append(motionMarker);
 const markerPosition = new THREE.Vector3();
+const person = createPersonLayer({ scene, stage, camera, router, positionLabel });
+const liveFetch = demoMode ? async () => new Response(JSON.stringify(demoReceivers(performance.now()))) : fetch.bind(window);
 
 calibrate.addEventListener("click", () => {
   const start = performance.now() + 7000;
@@ -188,7 +191,7 @@ function updateFloor() {
 
 async function readLive() {
   try {
-    const response = await fetch("/live", { signal: AbortSignal.timeout(2000) });
+    const response = await liveFetch("/live", { signal: AbortSignal.timeout(2000) });
     if (!response.ok) throw new Error(response.status);
     const source = response.headers.get("X-Stillpoint-Source");
     transmitterLabel.textContent = source === "esp32" ? "ESP32 transmitter" :
@@ -199,9 +202,10 @@ async function readLive() {
       if (!links.has(receiver.port)) links.set(receiver.port, makeLink(receiver.port, index));
       updateTrace(links.get(receiver.port), receiver);
     }
+    person.update(receivers, links, thresholds);
     const count = receivers.filter(receiver => receiver.motion !== null).length;
-    status.textContent = count ? count + (count === 1 ? " receiver" : " receivers") + (replayMode ? " replaying" : " live") : "Waiting for CSI";
-    if (replayMode) await readReplay();
+    status.textContent = count ? count + (count === 1 ? " receiver" : " receivers") + (replayMode ? " replaying" : demoMode ? " simulated" : " live") : "Waiting for CSI";
+    if (replayMode && !demoMode) await readReplay();
   } catch {
     detectMotion([]);
     for (const [port, link] of links) updateTrace(link, { port, motion: null, status: "Disconnected", samples: [] });
@@ -266,6 +270,7 @@ renderer.setAnimationLoop((time) => {
     markerPosition.y = 0.47;
     positionLabel(motionMarker, markerPosition);
   }
+  person.frame(time);
   renderer.render(scene, camera);
 });
 readLive();

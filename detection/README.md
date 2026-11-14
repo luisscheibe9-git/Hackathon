@@ -101,3 +101,38 @@ path (first two at the live layout positions, more on an arc). The current recor
 column, so it replays as one path, `receiver-1`. A synthetic 3-receiver CSV was used only to test
 the layout (`results/replay-screenshot-3rx-synthetic.jpg`). Live mode (`Start-CsiVisualizer.ps1 -Observatory`)
 is unchanged: the replay bar is hidden without `?replay=1`.
+
+## Person marker and presence state machine (Observatory)
+`tools/observatory/person-marker.js` (hooked into `observatory.js` with a few lines) draws a glowing
+~1.7 m figure with a floor halo and a side panel (presence state, motion score, P(moving), RSSI,
+active path, confidence, fall-rule status). It works in live mode, `?replay=1` and `?demo=fall`.
+
+- **Position is an estimated zone, not a measured spot.** 1 path: midpoint of the most disturbed
+  path. N paths: disturbance-weighted blend of the disturbed paths' midpoints, smoothed over ~1 s.
+  Halo radius is the uncertainty: about 1.1 m with one path, smaller as more paths agree. The caption
+  says "estimated zone".
+- **Driven by the presence state machine, not raw motion:** EMPTY (hidden) -> PRESENT after 2
+  moving ticks. PRESENT and moving: bright with a gentle pulse. PRESENT and still: stays at the last
+  zone, dimmer, slow pulse. Standing still never clears presence. It returns to EMPTY only after the
+  doorway path (`?door=<receiver port>`) fires and the room stays quiet for 15 s, or after
+  `?emptyAfter=<s>` of no motion (default 900 s).
+- **Fall rule** (RuView-style: strong burst, then >= 2 s still -> FALL_SUSPECTED, amber, figure tips
+  over; still for 20 s -> FALL_ALERT, red, banner with zone and time). It is untested on real
+  falls, so it is **off** in live and replay unless you add `?fall=1`.
+- **No heart-rate or respiration numbers.** `?breathing=1` only adds the words "breathing band:
+  experimental".
+- `?demo=fall` plays a scripted sequence (walk in, stand still, fall, alert after 6 s; 60 s loop)
+  on two simulated paths. It is labelled SIMULATED in the header, scene and panel, and needs no data:
+  ```bash
+  python detection/replay.py --no-browser --port 8791      # any server for tools/observatory works
+  # open http://127.0.0.1:8791/?demo=fall
+  python -m http.server 8792 -d tools/observatory           # alternative static server
+  # open http://127.0.0.1:8792/?demo=fall
+  ```
+- In replay and demo the live "Calibration needed" panel is hidden. Live mode is unchanged apart
+  from the added figure and panel.
+
+Screenshots (`detection/results/`): `person-marker-moving-replay.jpg` and
+`person-marker-still-replay.jpg` (real recording: trial 1 walking, then standing, still PRESENT),
+`person-marker-moving-sim.jpg`, `person-marker-still-sim.jpg`, `person-marker-fall-alert-sim.jpg`
+(simulated demo).

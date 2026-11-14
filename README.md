@@ -21,7 +21,7 @@ Add `-Observatory` to the Windows visualizer launcher to open the browser view. 
 
 The 3D floor reuses the MIT-licensed [RuView Observatory floor renderer](https://github.com/ruvnet/RuView/blob/3bae24a1231e0d9809e84eb35edba7231b8d1913/ui/observatory/js/presence-cartography.js) and Three.js 0.160.0. Both licenses are included under `tools/observatory/vendor/`.
 
-Offline replay of a saved CSV (no boards needed): `python detection/replay.py` opens the Observatory with `?replay=1`. See `detection/README.md`.
+Offline replay of a saved CSV (no boards needed): `python detection/replay.py` opens the Observatory with `?replay=1`. A presence figure (estimated zone, presence state machine) shows in all modes; `?demo=fall` plays a labelled simulated fall sequence. See `detection/README.md`.
 
 ## Three ESP32s without a router
 

@@ -28,3 +28,23 @@ article canvas { display: block; width: 100%; height: 50px; margin-top: 8px; bor
 .replay-controls input { width: min(360px, 60vw); accent-color: #94efd4; }
 .replay-controls select { background: #0b1522; color: #eaf6ff; border: 1px solid #36516c; border-radius: 6px; padding: 7px; font: inherit; }
 .replay[hidden] { display: none; }
+/* person marker layer (person-marker.js) */
+.person-panel { position: absolute; top: 12px; right: 12px; z-index: 2; width: min(270px, 46%); background: #0b1522e6; border: 1px solid #2c4a64; border-radius: 12px; padding: 12px 14px; font-size: 13px; }
+.person-panel h3 { margin: 0 0 8px; font-size: 14px; letter-spacing: .08em; text-transform: uppercase; color: #94efd4; }
+.person-panel .row { display: flex; justify-content: space-between; gap: 10px; padding: 4px 0; border-top: 1px solid #1d3247; }
+.person-panel .row span { color: #9bb7ce; }
+.person-panel .row b { font-weight: 600; text-align: right; }
+.person-panel b[data-state="PRESENT"] { color: #51ffb0; }
+.person-panel b[data-state="FALL_SUSPECTED"] { color: #ffb020; }
+.person-panel b[data-state="FALL_ALERT"] { color: #ff5a5a; }
+.person-panel .sim-note { margin-top: 8px; color: #ffcf6e; font-size: 12px; }
+.person-badge { transform: translate(-50%, -130%); font-weight: 700; letter-spacing: .06em; color: #062014; background: #51ffb0; border-color: #51ffb0; box-shadow: 0 0 14px #51ffb099; }
+.person-badge[data-state="FALL_SUSPECTED"] { background: #ffb020; border-color: #ffb020; box-shadow: 0 0 14px #ffb02099; }
+.person-badge[data-state="FALL_ALERT"] { background: #ff3b3b; border-color: #ff3b3b; color: #fff; box-shadow: 0 0 18px #ff3b3bcc; }
+.person-caption { font-size: 11px; color: #a8ffd9; background: #06121ccc; border-color: #1f4a3c; }
+.fall-banner { position: absolute; top: 12px; left: 12px; right: calc(min(270px, 46%) + 24px); z-index: 2; padding: 10px 14px; border-radius: 10px; font-weight: 700; background: #3a2600; border: 1px solid #ffb020; color: #ffd27a; }
+.fall-banner[data-level="FALL_ALERT"] { background: #3d0b0b; border-color: #ff3b3b; color: #ffd0d0; animation: alertPulse 1s ease-in-out infinite; }
+@keyframes alertPulse { 50% { box-shadow: 0 0 22px #ff3b3b99; } }
+.sim-tag { position: absolute; left: 14px; bottom: 34px; z-index: 2; padding: 3px 9px; border-radius: 5px; font-size: 12px; font-weight: 700; letter-spacing: .1em; color: #2b1a00; background: #ffcf6e; }
+section.detection[hidden] { display: none; }
+@media (max-width: 640px) { .person-panel { position: static; width: auto; margin: 8px; } }
