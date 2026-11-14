@@ -9,6 +9,7 @@ Background research for the project: **camera-free fall detection for elder care
 | [sources.md](sources.md) | Annotated list of videos, repos and papers |
 | [product.md](product.md) | Selling to nursing homes: buyers, competitors, what a real product needs |
 | [open-questions.md](open-questions.md) | Things we still need to decide or test |
+| [hackathon-rules.md](hackathon-rules.md) | Event deadlines, required workshops, judging rubric, submission rules, and what they mean for us |
 | [wifi-sensing.md](wifi-sensing.md) | ESP32-S3 demo results, setup, and reproduction steps |
 
 ## TL;DR
