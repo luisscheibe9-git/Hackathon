@@ -13,6 +13,7 @@ output { color: #94efd4; border: 1px solid #294748; border-radius: 8px; padding:
 #scene { position: relative; height: clamp(300px, 56vh, 660px); border: 1px solid #263c56; border-radius: 14px; overflow: hidden; background: radial-gradient(ellipse at center, #15283e, #090f19 75%); }
 #scene canvas { display: block; }
 .marker { position: absolute; z-index: 1; transform: translate(-50%, 5px); color: #d0eaff; background: #091221e8; border: 1px solid #36516c; border-radius: 5px; padding: 3px 8px; white-space: nowrap; pointer-events: none; }
+.motion-marker { color: #061b15; background: #94efd4; border-color: #94efd4; transform: translate(-50%, -100%); }
 .layout { position: absolute; left: 14px; bottom: 11px; color: #9bb7ce; font-size: 13px; z-index: 1; }
 #receivers { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 275px), 1fr)); gap: 12px; margin-top: 12px; }
 article { min-width: 0; background: #111c2b; border: 1px solid #263c56; border-radius: 12px; padding: 13px 16px; }

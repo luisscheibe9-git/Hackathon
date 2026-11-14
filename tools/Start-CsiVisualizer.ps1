@@ -3,10 +3,15 @@ param(
   [string]$Network = 'attinternet',
   [string]$Python = 'python',
   [switch]$Observatory,
-  [switch]$Standalone
+  [switch]$Standalone,
+  [string]$GatewayPort
 )
 
 $ErrorActionPreference = 'Stop'
+if ($GatewayPort) {
+  '' | & $Python (Join-Path $PSScriptRoot 'csi-visualizer.py') 'Stillpoint-CSI' $GatewayPort --observatory --gateway
+  exit $LASTEXITCODE
+}
 if ($Standalone) {
   'stillpoint-demo' | & $Python (Join-Path $PSScriptRoot 'csi-visualizer.py') 'Stillpoint-CSI' @Ports --observatory --external-traffic
   exit $LASTEXITCODE
