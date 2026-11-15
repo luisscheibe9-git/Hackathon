@@ -68,3 +68,8 @@ Both independent clones completed; their main revisions matched GitHub and worki
 - Exact117.500s,3525frames1080p30,full decode passed; all10cut boundaries reviewed;19caption cues no overlaps,max50characters/line. ArchiveCRC and11Shotcutclip references passed.
 - USE V3 SCRIPT: Downloads/Haven - Voiceover Script v3.txt. Recorder http://127.0.0.1:8941/Haven%20-%20Voiceover%20Recorder%20v3.html ; matching clean guideHTTP200. Old scripts superseded. User should clickRecord,permitmic,followcountdown/cues,Save recording; keepvisible/headphones. Ready to replace narration when take supplied. video/replace_voice.py preserves original and refuses overflow unless explicittrim; retime subtitles if necessary.
 - Primary usage last checked70% used; avoid unnecessary model work before userfeedback. Source project remains Desktop/Hackathon-latest/video; only STATUS changes committed/pushed. No publishing/submission.
+
+## Active revision4
+- Latest user wants newest website information and a stronger helping-people story, with permission to remake all sections except the real demo. Editor found website main3761a81 with real build/training photos, staff conversation and proposed pilot. Preserve real demo at original speed; use concise human-centered copy, no unsupported results.
+- Additional requirement: final encoded frame must show a large scannable QR linking to https://haven-public-ten.vercel.app, held several seconds, no fade to black. Verify QR URL.
+- Existing /root/video_editor owns revision4 render, subtitles, updated voice kit and Downloads exports. Preserve v3. Quota90% used at start, conserve remaining allowance. Main will review completed output.
