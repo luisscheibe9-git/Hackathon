@@ -79,3 +79,10 @@ Both independent clones completed; their main revisions matched GitHub and worki
 - Uses latest Haven main3761a81: real staff visit, build/training photos, privacy benefits, continuous original demo, caregiver room-alert benefit and explicitly proposed pilot metrics. Main reviewed panel contact sheet. Final four seconds hold large website QR; actual final encoded frames of both exports decoded to https://haven-public-ten.vercel.app.
 - Verification: full decode both exports117.500s/3525frames1080p, fresh edit ZIP CRC passed and QR included. Current recorder HTTP200 at http://127.0.0.1:8941/Haven%20-%20Voiceover%20Recorder%20v4.html. Use v4 script for recording; older scripts superseded.
 - Primary quota97% used at completion. Preserve remaining allowance. Await user's recording or feedback. Video source remains local/uncommitted; only STATUS handoff pushed. No publishing/submission.
+
+## Revision 5 delivered — November 15
+
+- Replaced the proposed pilot at 01:34.5–01:46.5 with the website’s “Rooms, not people” explanation. Staff get a room number without the resident’s name or photo in the alert. Wi-Fi signals and activity labels are the model inputs. The staged test and four-second closing QR card use the exact v4 clips.
+- Downloads contains Haven - Challenge Film v5.mp4, Haven - Clean Picture v5.mp4, Haven - Editable Project v5.zip, Haven - Captions v5.srt, Haven - Scratch Narration v5.wav, Haven - Voiceover Recorder v5.html, and Haven - Voiceover Script v5.txt. Versions 1–4 are preserved.
+- Verified complete video decode, 3,525 frames at 1080p30 and 117.500 seconds. Checked cut boundary frames and all 21 caption cues. Both final encoded frames scan to https://haven-public-ten.vercel.app. ZIP CRC and eleven picture entries passed.
+- Recorder and matching silent guide are served at http://127.0.0.1:8941/Haven%20-%20Voiceover%20Recorder%20v5.html . Use the v5 script. This edit has scratch narration and has not been published or submitted.
