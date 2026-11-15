@@ -29,3 +29,11 @@ Haven uses three ESP32-WROOM-32U boards for router-free Wi-Fi CSI sensing. The g
 
 ## Verification
 Both independent clones completed; their main revisions matched GitHub and working trees were clean before this handoff. Website source and repo notes reviewed. No application code was changed and no new hardware/model validation was performed.
+
+## Overnight video task — Nov 15, 02:32 Pacific
+- User requests a finished, polished, editable OpenAI challenge video for review before 9AM, with actual demo footage, two product photos, and Haven presentation styling. Under 120 seconds required. No further user questions; synthetic scratch narration and subtitles approved; team will replace voice later.
+- Media downloaded from Drive Recents via signed-in browser, not Hackathon folder: IMG_0512.MOV (35.87s), IMG_0496.HEIC, IMG_0497.HEIC. Originals in video/assets/originals; JPEG conversions in video/assets. Preserve source originals. Caption actual staged test honestly; website animation is simulated.
+- Smaller-model subagent /root/video_editor (gpt-6.1-sol, low) owns assembly/render/source files. Main agent reviews finished result. Do not touch its files concurrently.
+- Python tools installed in video/.venv; read video/README.md. Final deliverables copied to Downloads. No video files or code pushed without user approval; only this handoff is authorized for push.
+- User superseded initial quota request: next five-hour window can be fully used, but prioritize pacing and finished deliverable. At02:32 current primary75% used, resets04:00:29 Pacific (Unix1794744029). Leave margin now, check usage at milestones; do not redeem resets or purchase credits. Resume quality work after natural reset if needed. Account-wide usage can change due other tasks.
+- Latest guide verified in browser: OpenAI challenge 'Build something that helps someone', requires Codex, <2min video and public-viewable link before noon. Preparing local export only; publishing/submitting remains user's action.
