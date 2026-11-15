@@ -24,3 +24,7 @@ Background research for the project: **camera-free fall detection for elder care
 ## Adding research
 
 Add a new `.md` file here or append to `sources.md` with: link, one-line summary, and what it means for us. Keep big PDFs out of the repo; link them instead.
+
+## Research contributions
+
+Research assistance: OpenAI Codex (AI assistant).
