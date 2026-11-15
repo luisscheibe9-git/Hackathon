@@ -34,3 +34,6 @@ detection:
   recover_seconds: 3                     # standing/walking this long ends a fall episode
   drop_seconds: 2.5                      # active -> lying faster than this counts as a possible fall
   alert_on_any_lying: false              # also alert when someone lies down slowly (no fall detected)
+notify:
+  ntfy_topic: ""          # set a long random topic, subscribe to it in the ntfy phone app
+  message: "Check on patient."

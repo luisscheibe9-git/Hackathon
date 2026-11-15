@@ -23,6 +23,7 @@ import argparse
 import base64
 import json
 import os
+import re
 import socket
 import struct
 import sys
@@ -50,7 +51,7 @@ VALID = np.r_[1:27, 38:64]       # 52 data subcarriers: DC (0) and guard band (2
 N_SC = len(VALID)
 WINDOW = 700                     # frames kept per link (~14 s at 50 Hz)
 
-WIN, HOP, MIN_FRAMES = 1.5, 0.5, 4   # feature window, step, minimum frames per link per window
+WIN, HOP, MIN_FRAMES = 2.0, 0.5, 4   # (was 1.5 s; widened for our ~3-10 pkt/s paths) feature window, step, minimum frames per link per window
 LAG = 1.0                        # training windows end 1 s in the past so camera fall events can arrive
 LABELS = ["empty", "standing", "walking", "sitting", "lying", "fall"]
 ACTIVE = {"standing", "walking", "sitting"}
@@ -164,7 +165,7 @@ class Receiver:
                 node["mac"] = mac
                 self.names.setdefault(mac, str(nid))         # learn peers that aren't in config.yaml
 
-    def active_links(self, now, min_pps=5.0):
+    def active_links(self, now, min_pps=3.0):
         with self.lock:
             items = list(self.links.items())
         return sorted(k for k, l in items if l.stats(now)["pps"] >= min_pps)
@@ -183,24 +184,142 @@ def udp_loop(rx, port):
             print("parse error:", e, flush=True)
 
 
-def serial_loop(rx, port, baud):
+GATEWAY_STATS = {"ok": 0, "bad": 0, "last_bad": b""}
+# Raw CSI log while a recording runs (data/raw/raw-<session>-<time>.csv), so recordings can be
+# re-analysed later with other windows/features. Haven itself only stores finished features.
+RAW_LOG = {"f": None, "prompt": "", "paused": True, "lock": threading.Lock()}
+
+
+def raw_log_open(session):
+    raw_log_close()
+    os.makedirs(os.path.join(DATA, "raw"), exist_ok=True)
+    path = os.path.join(DATA, "raw", f"raw-{session}-{time.strftime('%Y%m%d-%H%M%S')}.csv")
+    f = open(path, "w", buffering=1 << 16)
+    f.write("t,kind,receiver_mac,rssi_dbm,prompt,paused,lltf_hex_centered\n")
+    with RAW_LOG["lock"]:
+        RAW_LOG["f"] = f
+    print("raw CSI log:", path, flush=True)
+
+
+def raw_log_close():
+    with RAW_LOG["lock"]:
+        f, RAW_LOG["f"] = RAW_LOG["f"], None
+    if f:
+        f.close()
+
+
+def parse_gateway_line(rx, line):
+    """Adapt the existing three-board Arduino gateway to the Haven packet parser."""
+    match = re.fullmatch(rb"(RELAY|PEER),([0-9a-f]{12}),(-?\d+),([0-9a-f]{256})", line.strip())
+    if not match:
+        if line.strip():
+            GATEWAY_STATS["bad"] += 1
+            GATEWAY_STATS["last_bad"] = line.strip()
+        return
+    GATEWAY_STATS["ok"] += 1
+    if RAW_LOG["f"]:
+        with RAW_LOG["lock"]:
+            if RAW_LOG["f"]:
+                RAW_LOG["f"].write(f"{time.time():.3f},{match[1].decode()},{match[2].decode()},{match[3].decode()},"
+                                   f"{RAW_LOG['prompt']},{int(RAW_LOG['paused'])},{match[4].decode()}\n")
+    kind, raw_mac, raw_rssi, raw_csi = match.groups()
+    mac = ":".join(raw_mac.decode()[i:i + 2] for i in range(0, 12, 2))
+    nid = rx.names.get(mac)
+    if nid not in ("2", "3") or (kind == b"PEER" and nid != "3"):
+        return
+    source = "2" if kind == b"PEER" else "1"
+    source_mac = next((address for address, number in rx.names.items() if number == source), None)
+    if source_mac is None:
+        return
+    header = bytearray(20)
+    struct.pack_into("<I", header, 0, CSI_MAGIC)
+    header[4] = int(nid)
+    struct.pack_into("<b", header, 16, int(raw_rssi))
+    # The Arduino receivers send the 64 L-LTF tones in centred order (-32..31): measured live on
+    # Nov 14, zeros sit at indices 2-4 and 60-63. Haven expects 0..31,-32..-1, so swap the halves.
+    # The first-word-invalid tones (-32, -31) then land in the guard band, which VALID already
+    # drops, so F_FIRST_BAD must NOT be set (it would overwrite real subcarrier 1).
+    csi = bytes.fromhex(raw_csi.decode())
+    csi = csi[64:] + csi[:64]
+    header[19] = F_TX_MAC
+    rx.parse(bytes(header) + csi + bytes.fromhex(source_mac.replace(":", "")), "gateway")
+
+
+def handle_serial_line(rx, port, line, gateway):
+    if gateway:
+        try:
+            parse_gateway_line(rx, line)
+        except Exception as e:  # one bad line must not stop the reader
+            print("gateway parse error:", e, flush=True)
+    elif line.startswith(b"CSIB:"):
+        try:
+            rx.parse(base64.b64decode(line[5:].strip()), f"serial:{port}")
+        except Exception:
+            pass
+
+
+def serial_loop(rx, port, baud, gateway=False):
+    """Non-blocking reader (short read timeout + manual line splitting, like tools/csi-visualizer.py)
+    plus a watchdog thread that force-closes the port if no bytes arrive for 5 s. On Nov 14 a
+    blocking readline() hung for good mid-session and silently lost most of a training run."""
     import serial
     while True:
+        s = None
         try:
-            s = serial.Serial(baudrate=baud, timeout=1)
+            s = serial.Serial(baudrate=baud, timeout=0.2)
             s.port, s.dtr, s.rts = port, False, False      # don't reset the board when opening
             s.open()
+            try:
+                s.set_buffer_size(rx_size=1 << 20)          # Windows default (4 KB) overflows and mangles lines
+            except Exception:
+                pass
             print(f"reading serial CSI from {port}", flush=True)
-            while True:
-                line = s.readline()
-                if line.startswith(b"CSIB:"):
-                    try:
-                        rx.parse(base64.b64decode(line[5:].strip()), f"serial:{port}")
-                    except Exception:
-                        pass
+            state = {"last": time.time(), "alive": True}
+
+            def watchdog(conn=s, st=state):
+                while st["alive"]:
+                    time.sleep(1)
+                    if st["alive"] and time.time() - st["last"] > 5:
+                        print(f"serial {port}: no data for 5 s, force-reopening", flush=True)
+                        st["alive"] = False
+                        try:
+                            conn.cancel_read()
+                        except Exception:
+                            pass
+                        try:
+                            conn.close()
+                        except Exception:
+                            pass
+
+            threading.Thread(target=watchdog, daemon=True).start()
+            pending, lines, report = bytearray(), 0, time.time()
+            while state["alive"]:
+                chunk = s.read(s.in_waiting or 1)
+                now = time.time()
+                if chunk:
+                    state["last"] = now
+                    pending.extend(chunk)
+                    while b"\n" in pending:
+                        line, _, rest = pending.partition(b"\n")
+                        pending = bytearray(rest)
+                        lines += 1
+                        handle_serial_line(rx, port, bytes(line), gateway)
+                    if len(pending) > 4096:
+                        pending.clear()
+                if now - report > 10:
+                    print(f"serial {port}: {lines / (now - report):.1f} lines/s, gateway matched "
+                          f"{GATEWAY_STATS['ok']}, unmatched {GATEWAY_STATS['bad']}", flush=True)
+                    lines, report = 0, now
+            state["alive"] = False
         except Exception as e:
-            print(f"serial {port}: {e}; retrying in 3 s", flush=True)
-            time.sleep(3)
+            print(f"serial {port}: {e}; retrying in 2 s", flush=True)
+            time.sleep(2)
+        finally:
+            try:
+                if s is not None:
+                    s.close()
+            except Exception:
+                pass
 
 
 # --------------------------------------------------------------------------------------- features
@@ -285,6 +404,25 @@ def predict(Z, y, Q, k=7):
     return np.array(out)
 
 
+def balanced(mask, y, cap=4.0, seed=0):
+    """Subset of a boolean mask where no class has more than cap x the smallest class's windows.
+    The lying-focused routine records ~7x more lying than standing; unbalanced, kNN then calls
+    standing 'lying' (a 4 s false run on the Nov 14 test round). Deterministic (fixed seed)."""
+    idx = np.where(mask)[0]
+    if not len(idx):
+        return mask
+    labs, cnt = np.unique(y[idx], return_counts=True)
+    limit = int(cap * cnt.min())
+    rng = np.random.default_rng(seed)
+    keep = []
+    for l in labs:
+        li = idx[y[idx] == l]
+        keep.append(li if len(li) <= limit else np.sort(rng.choice(li, limit, replace=False)))
+    out = np.zeros_like(mask)
+    out[np.concatenate(keep)] = True
+    return out
+
+
 def training_label(y_cam, y_prompt):
     """Label used for training: the camera's, if the movement page's prompt allows it ('' otherwise).
     Free recording (no prompt) uses the camera label as is."""
@@ -292,6 +430,14 @@ def training_label(y_cam, y_prompt):
         return ""
     if not y_prompt:
         return y_cam
+    # Team decision (Nov 14): sitting on a chair and squatting are ONE class. The camera often reads
+    # a squat as "standing", so under the sit/squat prompt standing also counts as sitting.
+    if y_prompt == "sitting" and y_cam in ("sitting", "standing"):
+        return "sitting"
+    # 4-class routine: while asked to lie down, the camera may read curled-up / propped poses as
+    # "sitting"; the person is on the floor, so that counts as lying.
+    if y_prompt == "lying" and y_cam in ("lying", "sitting"):
+        return "lying"
     return y_cam if y_cam in ACCEPT.get(y_prompt, set()) else ""
 
 
@@ -316,7 +462,7 @@ class Dataset:
     def save(self):
         os.makedirs(DATA, exist_ok=True)
         tmp = DATASET + ".tmp.npz"
-        np.savez(tmp, X=np.array(self.X, np.float32).reshape(len(self.X), -1), cam=np.array(self.cam, dtype=str),
+        np.savez(tmp, X=np.array(self.X, np.float32).reshape(len(self.X), -1) if self.X else np.zeros((0, 0), np.float32), cam=np.array(self.cam, dtype=str),
                  prompt=np.array(self.prompt, dtype=str), sess=np.array(self.sess, dtype=str),
                  rnd=np.array(self.rnd, np.int32), take=np.array(self.take, np.int32), t=np.array(self.t),
                  ids=np.array(self.ids or [], dtype=str))
@@ -327,6 +473,7 @@ class Dataset:
         with self.lock:
             now = time.time()
             if not body.get("on"):
+                raw_log_close()
                 if self.rec:
                     self.rec = None
                     self.save()
@@ -342,6 +489,8 @@ class Dataset:
             self.rec = {"session": body.get("session", "train"), "round": int(body.get("round", 1)),
                         "prompt": body.get("prompt") or "", "take": take, "n": 0, "skipped": 0,
                         "paused": bool(body.get("prompt"))}   # guided sessions start in a countdown
+            raw_log_open(f"{self.rec['session']}-r{self.rec['round']}")
+            RAW_LOG["prompt"], RAW_LOG["paused"] = self.rec["prompt"], self.rec["paused"]
             return None
 
     def set_prompt(self, prompt, paused=False):
@@ -355,6 +504,7 @@ class Dataset:
             if r.get("paused") and not paused:
                 r["take"] = max(self.take + [r["take"]]) + 1
             r["prompt"], r["paused"] = prompt or "", paused
+            RAW_LOG["prompt"], RAW_LOG["paused"] = r["prompt"], paused
 
     def tick(self, rx, cam, now):
         with self.lock:
@@ -390,6 +540,46 @@ class Dataset:
         y = np.array([training_label(c, p) for c, p in zip(self.cam, self.prompt)], dtype=object)
         return X, y, np.array(self.sess), np.array(self.rnd)
 
+    CAL_ROUND = 99     # calibration windows: session "train", round 99; each calibration replaces the last
+    CAL_ROUNDS = {"empty": 99, "standing": 96, "walking": 95, "lying": 94}   # one round per calibrated state
+    CAL_WEIGHT = 3     # calibration windows count 3x (fresh, exact demo conditions) so old rounds can't outvote them
+
+    def calibrate_empty(self, rx, seconds=20.0, countdown=5.0, label="empty", session="train", rnd=None):
+        """Demo 'Calibrate empty room': after a countdown (people leave), record `seconds` of the
+        empty room live, replace the previous calibration and retrain. Runs in its own thread."""
+        rnd = self.CAL_ROUND if rnd is None else rnd
+        st = self.cal = {"phase": "countdown", "ends": time.time() + countdown, "n": 0, "error": None,
+                         "label": label, "session": session}
+        time.sleep(countdown)
+        ids = self.ids or rx.active_links(time.time())
+        if not ids:
+            st.update(phase="error", ends=time.time() + 3, error="no links streaming")
+            return
+        st.update(phase="recording", ends=time.time() + seconds)
+        X, ts = [], []
+        while time.time() < st["ends"]:
+            t_end = time.time() - 0.1
+            f = feature(rx, ids, t_end)
+            if f is not None:
+                X.append(f); ts.append(t_end); st["n"] = len(X)
+            time.sleep(HOP)
+        if len(X) < 5:
+            st.update(phase="error", ends=time.time() + 3, error=f"only {len(X)} windows (links dropping?)")
+            return
+        with self.lock:
+            keep = [i for i, r in enumerate(self.rnd) if not (r == rnd and self.sess[i] == session)]
+            for name in ("X", "cam", "prompt", "sess", "rnd", "take", "t"):
+                setattr(self, name, [getattr(self, name)[i] for i in keep])
+            self.ids = self.ids or ids
+            take = (max(self.take) + 1) if self.take else 1
+            for f, t in zip(X, ts):
+                self.X.append(f); self.cam.append(label); self.prompt.append(label); self.sess.append(session)
+                self.rnd.append(rnd); self.take.append(take); self.t.append(t)
+            self.save()
+            self.train()
+        st.update(phase="done", ends=time.time())
+        print(f"recorded {label} ({session}, round {rnd}): {len(X)} windows", flush=True)
+
     def train(self):
         if not self.X:
             self.model = None
@@ -400,27 +590,34 @@ class Dataset:
         if tr.sum() < 10 or len(set(y[tr])) < 2:
             self.model = None
             return
+        n_train = int(tr.sum())
+        cal = tr & np.isin(rnd, list(self.CAL_ROUNDS.values()))
+        # a calibrated state uses ONLY its latest calibration run: old training windows of that state are dropped
+        tr = tr & (cal | ~np.isin(y, list(set(y[cal]))))
+        tr = balanced(tr & ~cal, y) | cal                  # cap majority classes at 4x the smallest (2x starved lying on setup 4; host/cap_sweep.py)
         mu, sd = X[tr].mean(0), X[tr].std(0) + 1e-6
         Z = (X - mu) / sd
         labels = sorted(set(y[tr]))
+        use = np.concatenate([np.where(tr & ~cal)[0]] + [np.where(cal)[0]] * self.CAL_WEIGHT)
         test = None
         if te.any():
-            p = predict(Z[tr], y[tr], Z[te])
+            p = predict(Z[use], y[use], Z[te])
             yt = y[te]
             test = {"acc": float((p == yt).mean()), "n": int(te.sum()),
                     "per_class": {l: float((p[yt == l] == l).mean()) for l in sorted(set(yt))},
                     "confusion": {l: {q: int(((yt == l) & (p == q)).sum()) for q in labels} for l in sorted(set(yt))}}
         lor = None
-        rounds = sorted(set(rnd[tr].tolist()))
+        rounds = sorted(set(rnd[tr & ~cal].tolist()))
         if len(rounds) >= 2:
             hits = []
             for r in rounds:
-                a, b = tr & (rnd != r), tr & (rnd == r)
+                a, b = balanced(ok & (sess == "train") & ~cal & (rnd != r), y), ok & (sess == "train") & (rnd == r)
                 if len(set(y[a])) >= 2 and b.any():
                     hits += list(predict(Z[a], y[a], Z[b]) == y[b])
             lor = float(np.mean(hits)) if hits else None
         counts = {s: {l: int(((sess == s) & (y == l)).sum()) for l in LABELS} for s in ("train", "test")}
-        self.model = {"mu": mu, "sd": sd, "Z": Z[tr], "y": y[tr], "labels": labels, "test": test, "lor": lor,
+        cal_counts = {l: int((cal & (y == l)).sum()) for l in LABELS if (cal & (y == l)).any()}
+        self.model = {"mu": mu, "sd": sd, "Z": Z[use], "y": y[use], "labels": labels, "calibrated": cal_counts, "test": test, "lor": lor,
                       "counts": counts, "dropped": int((~ok).sum())}
         self.write_metrics()
 
@@ -458,11 +655,37 @@ class Dataset:
             if lab:
                 counts.setdefault(s, {}).setdefault(lab, 0)
                 counts[s][lab] += 1
-        return {"counts": counts, "ids": self.ids, "recording": dict(self.rec) if self.rec else None,
+        return {"counts": counts, "calibrated": m.get("calibrated"), "ids": self.ids, "recording": dict(self.rec) if self.rec else None,
                 "test": m.get("test"), "lor": m.get("lor"), "trained": bool(self.model), "total": len(self.X)}
 
 
 # -------------------------------------------------------------------------------- live detection
+
+def push_phone(cfg, test=False):
+    """Phone notification through ntfy (https://ntfy.sh): install the ntfy app, subscribe to the topic
+    in config.yaml (notify.ntfy_topic). Fire-and-forget in a thread so the detector never blocks.
+    Returns the send time (shown on the demo screen), or None if no topic is configured."""
+    n = cfg.get("notify") or {}
+    topic = n.get("ntfy_topic")
+    if not topic:
+        return None
+    room = cfg.get("room", {}).get("name", "the room")
+    title = "TEST: fall alert" if test else f"Fall detected in {room}"
+    msg = n.get("message", "Check on patient.")
+
+    def send():
+        import urllib.request
+        try:
+            req = urllib.request.Request(f"{n.get('ntfy_server', 'https://ntfy.sh')}/{topic}", data=msg.encode(),
+                                         headers={"Title": title, "Priority": "urgent", "Tags": "rotating_light"})
+            urllib.request.urlopen(req, timeout=5).read()
+            print(f"phone notification sent: {title}", flush=True)
+        except Exception as e:
+            print(f"phone notification failed: {e}", flush=True)
+
+    threading.Thread(target=send, daemon=True).start()
+    return time.time()
+
 
 class Detector:
     """Fall / long-lie state machine on top of the WiFi activity estimate.
@@ -475,6 +698,9 @@ class Detector:
 
     def __init__(self, cfg):
         d = cfg.get("detection") or {}
+        self.cfg = cfg
+        self.last_push = None
+        self.armed = False          # phone push only while the demo screen is started (Start -> /api/reset)
         self.long_lie = float(d.get("long_lie_seconds", 10))
         self.recover = float(d.get("recover_seconds", 3))
         self.alert_any_lying = bool(d.get("alert_on_any_lying", False))
@@ -488,6 +714,8 @@ class Detector:
         if state != self.state:
             self.state, self.since = state, now
             self.events.appendleft({"t": now, "state": state, "note": note})
+            if state == "alert" and self.armed:
+                self.last_push = push_phone(self.cfg)
 
     def update(self, est, now):
         if not est or est.get("status") not in ("ok", "unsure"):
@@ -517,6 +745,9 @@ class Detector:
             elif self.state == "fall_suspected" and now - self.lying_since >= self.long_lie:
                 self._go("alert", now, f"on the floor for {self.long_lie:.0f}s")
             return
+        if self.state == "alert" and not self.acked:
+            return                                       # a FALL ALERT stays until staff acknowledge it:
+                                                         # limb movement on the floor can read as "walking"
         if on_floor and not (self.up_since and now - self.up_since >= self.recover):
             return                                       # brief flicker: stay on the floor
         self.lying_since = None
@@ -527,6 +758,14 @@ class Detector:
         if self.state != "alert":
             self.fall_time = None
 
+    def reset(self, now):
+        """Demo screen Start/Reset: forget any fall in progress and start watching fresh."""
+        self.lying_since = self.fall_time = self.last_active = self.up_since = self.last_push = None
+        self.acked = False
+        self.state, self.since = "unknown", now
+        self.armed = True
+        self.events.appendleft({"t": now, "state": "reset", "note": "demo reset"})
+
     def ack(self, now):
         self.acked = True
         self.events.appendleft({"t": now, "state": self.state, "note": "acknowledged by staff"})
@@ -534,7 +773,7 @@ class Detector:
     def summary(self, now):
         return {"state": self.state, "since": self.since, "for_s": now - self.since,
                 "on_floor_s": (now - self.lying_since) if self.lying_since and self.state in ("fall_suspected", "alert") else None,
-                "fall_time": self.fall_time, "acknowledged": self.acked, "long_lie_s": self.long_lie,
+                "fall_time": self.fall_time, "acknowledged": self.acked, "pushed": self.last_push, "long_lie_s": self.long_lie,
                 "events": list(self.events)[:12]}
 
 
@@ -595,6 +834,26 @@ def make_handler(app):
             if path == "/api/clear":
                 app.data.clear(body.get("session"))
                 return self.send_json({"ok": True})
+            if path == "/api/notify_test":
+                t = push_phone(app.cfg, test=True)
+                return self.send_json({"ok": bool(t), "error": None if t else "no notify.ntfy_topic in config.yaml"})
+            if path == "/api/calibrate":
+                c = getattr(app.data, "cal", None)
+                if c and c["phase"] in ("countdown", "recording"):
+                    return self.send_json({"ok": False, "error": "already calibrating"})
+                secs = float(body.get("seconds", 20))
+                # label/session/round: re-record one class only, e.g. {"label":"standing","round":98}
+                lbl = body.get("label", "empty")
+                args = (app.rx, secs, float(body.get("countdown", 5)), lbl,
+                        body.get("session", "train"), body.get("round", Dataset.CAL_ROUNDS.get(lbl)))
+                threading.Thread(target=app.data.calibrate_empty, args=args, daemon=True).start()
+                return self.send_json({"ok": True})
+            if path == "/api/disarm":
+                app.detector.armed = False
+                return self.send_json({"ok": True})
+            if path == "/api/reset":
+                app.detector.reset(time.time())
+                return self.send_json({"ok": True})
             if path == "/api/ack":
                 app.detector.ack(time.time())
                 return self.send_json({"ok": True})
@@ -617,12 +876,30 @@ class App:
             now = time.time()
             for name, fn in (("recording", lambda: self.data.tick(self.rx, self.camera, now)),
                              ("estimate", lambda: setattr(self, "est", self.data.estimate(self.rx, now))),
-                             ("detector", lambda: self.detector.update(self.est, now))):
+                             ("detector", lambda: self.detector.update(self.est, now)),
+                             ("live log", lambda: self.log_live(now))):
                 try:
                     fn()
                 except Exception as e:  # never let the loop die silently
                     print(f"{name} error: {e!r}", flush=True)
             time.sleep(HOP)
+
+    def log_live(self, now):
+        """One row per tick (0.5 s) to data/live-log-<date>.csv: what the model saw and what the
+        alert logic decided, so a live test can be reviewed afterwards."""
+        est = getattr(self, "est", None) or {}
+        probs = est.get("probs") or {}
+        if not hasattr(self, "_live_log"):
+            os.makedirs(DATA, exist_ok=True)
+            path = os.path.join(DATA, f"live-log-{time.strftime('%Y%m%d')}.csv")
+            new = not os.path.exists(path)
+            self._live_log = open(path, "a", buffering=1)
+            if new:
+                self._live_log.write("t,clock,state,best,confidence,p_empty,p_standing,p_walking,p_sitting,p_lying,status,pps\n")
+        pps = "|".join(f"{k}:{self.rx.links[k].stats(now)['pps']:.0f}" for k in sorted(self.rx.links))
+        self._live_log.write(f"{now:.2f},{time.strftime('%H:%M:%S')},{self.detector.state},{est.get('best', '')},"
+                             f"{est.get('confidence', 0):.2f}," + ",".join(f"{probs.get(k, 0):.2f}" for k in
+                             ("empty", "standing", "walking", "sitting", "lying")) + f",{est.get('status', '')},{pps}\n")
 
     def signal_ok(self, now):
         return any(l.stats(now)["pps"] >= 2 for l in list(self.rx.links.values()))
@@ -647,18 +924,22 @@ class App:
         return {"t": now, "links": {k: l.stats(now) for k, l in sorted(links.items())},
                 "nodes": {str(k): {**v, "age": now - v.get("seen", now)} for k, v in sorted(self.rx.nodes.items())},
                 "boards": boards, "data": self.data.summary(), "estimate": est,
-                "camera": {"label": lab, "age": age}, "live": self.live()}
+                "camera": {"label": lab, "age": age}, "live": self.live(),
+                "calibration": getattr(self.data, "cal", None)}
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--serial", action="append", default=[], help="also read CSI lines from this serial port")
+    ap.add_argument("--gateway", help="Arduino RELAY/PEER gateway port, at 460800 baud")
     ap.add_argument("--baud", type=int, default=921600)
     ap.add_argument("--config")
     ap.add_argument("--host", default="127.0.0.1", help="HTTP bind address (use 0.0.0.0 to share on the LAN)")
     a = ap.parse_args()
     cfg = havenconfig.load(a.config)
     app = App(cfg)
+    if a.gateway:
+        threading.Thread(target=serial_loop, args=(app.rx, a.gateway, 460800, True), daemon=True).start()
     threading.Thread(target=udp_loop, args=(app.rx, cfg["host"]["udp_port"]), daemon=True).start()
     for p in a.serial:
         threading.Thread(target=serial_loop, args=(app.rx, p, a.baud), daemon=True).start()

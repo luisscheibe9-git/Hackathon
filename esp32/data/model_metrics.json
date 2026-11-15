@@ -1,0 +1,67 @@
+{
+ "generated": "2026-11-15T01:03:16",
+ "model": "k-nearest neighbours (k=7) on standardised WiFi CSI features",
+ "links": [
+  "1>2",
+  "1>3",
+  "2>3"
+ ],
+ "labels": [
+  "empty",
+  "lying",
+  "standing",
+  "walking"
+ ],
+ "train_windows": 480,
+ "test_session": {
+  "acc": 0.6260162601626016,
+  "n": 123,
+  "per_class": {
+   "empty": 0.0,
+   "lying": 1.0,
+   "walking": 0.391304347826087
+  },
+  "confusion": {
+   "empty": {
+    "empty": 0,
+    "lying": 32,
+    "standing": 0,
+    "walking": 0
+   },
+   "lying": {
+    "empty": 0,
+    "lying": 68,
+    "standing": 0,
+    "walking": 0
+   },
+   "walking": {
+    "empty": 0,
+    "lying": 14,
+    "standing": 0,
+    "walking": 9
+   }
+  }
+ },
+ "leave_one_round_out_acc": null,
+ "counts": {
+  "train": {
+   "empty": 170,
+   "standing": 40,
+   "walking": 130,
+   "sitting": 0,
+   "lying": 307,
+   "fall": 0
+  },
+  "test": {
+   "empty": 32,
+   "standing": 0,
+   "walking": 23,
+   "sitting": 0,
+   "lying": 68,
+   "fall": 0
+  }
+ },
+ "windows_dropped_camera_disagreed": 0,
+ "split": "test = a separately recorded session; never windows sampled from the training recordings",
+ "chance_acc": 0.25
+}

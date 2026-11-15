@@ -1,0 +1,330 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Haven · Live room</title>
+<style>
+  :root {
+    --bg: #0b1220; --panel: #121b2e; --panel2: #172238; --line: #24314d; --ink: #eef3fb; --muted: #8fa0bd;
+    --calm: #3ddc97; --calm-soft: rgba(61, 220, 151, .14); --move: #5fb4ff; --move-soft: rgba(95, 180, 255, .14);
+    --warn: #ffb020; --warn-soft: rgba(255, 176, 32, .16); --alert: #ff4d4f; --alert-soft: rgba(255, 77, 79, .18);
+    --font: "Segoe UI", Inter, -apple-system, system-ui, sans-serif; --mono: "Cascadia Mono", Consolas, ui-monospace, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 18px/1.4 var(--font); overflow: hidden; }
+  .app { height: 100vh; display: grid; grid-template-rows: auto 1fr auto; gap: 18px; padding: 22px 30px; }
+
+  /* top bar */
+  .top { display: flex; align-items: center; gap: 22px; }
+  .brand { font-size: 34px; font-weight: 800; letter-spacing: .5px; }
+  .brand span { color: var(--calm); }
+  .room { font-size: 22px; color: var(--muted); }
+  .spacer { flex: 1; }
+  .pill { display: inline-flex; align-items: center; gap: 10px; padding: 9px 16px; border-radius: 999px; background: var(--panel); border: 1px solid var(--line); font-size: 18px; font-weight: 600; }
+  .dot { width: 12px; height: 12px; border-radius: 50%; background: var(--calm); box-shadow: 0 0 0 0 rgba(61,220,151,.7); animation: ping 1.6s infinite; }
+  .pill.off .dot { background: var(--warn); animation: none; }
+  @keyframes ping { 0% { box-shadow: 0 0 0 0 rgba(61,220,151,.6); } 100% { box-shadow: 0 0 0 14px rgba(61,220,151,0); } }
+  .clock { font: 600 30px/1 var(--mono); color: var(--ink); }
+
+  /* main */
+  .main { display: grid; grid-template-columns: 1.35fr 1fr; gap: 20px; min-height: 0; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 22px; padding: 26px 30px; min-height: 0; }
+  .label { font-size: 16px; font-weight: 700; letter-spacing: 1.6px; text-transform: uppercase; color: var(--muted); margin: 0 0 14px; }
+
+  .status { display: flex; flex-direction: column; justify-content: center; position: relative; overflow: hidden; transition: background .4s, border-color .4s; }
+  .status .icon { width: 150px; height: 150px; border-radius: 40px; display: grid; place-items: center; background: var(--calm-soft); color: var(--calm); transition: all .4s; }
+  .status .icon svg { width: 96px; height: 96px; }
+  .status h1 { font-size: clamp(56px, 5.6vw, 116px); line-height: .95; margin: 26px 0 10px; font-weight: 800; letter-spacing: -1.5px; }
+  .status .sub { font-size: clamp(24px, 2.2vw, 36px); color: var(--muted); }
+  .status .meter { margin-top: 26px; height: 14px; border-radius: 999px; background: var(--panel2); overflow: hidden; display: none; }
+  .status .meter i { display: block; height: 100%; width: 0; background: var(--warn); transition: width .45s linear; }
+  .s-empty   { } .s-empty .icon { background: rgba(143,160,189,.14); color: var(--muted); }
+  .s-active .icon { background: var(--move-soft); color: var(--move); }
+  .s-active h1 { color: var(--ink); }
+  .s-fall_suspected { background: linear-gradient(180deg, rgba(255,176,32,.12), var(--panel)); border-color: var(--warn); }
+  .s-fall_suspected .icon { background: var(--warn-soft); color: var(--warn); }
+  .s-fall_suspected h1 { color: var(--warn); }
+  .s-fall_suspected .meter { display: block; }
+  .s-alert { background: linear-gradient(180deg, rgba(255,77,79,.28), rgba(255,77,79,.08)); border-color: var(--alert); animation: alertGlow 1.1s ease-in-out infinite; }
+  .s-alert .icon { background: var(--alert); color: #fff; }
+  .s-alert h1 { color: #fff; }
+  .s-alert .sub { color: #ffd6d6; }
+  @keyframes alertGlow { 50% { box-shadow: 0 0 60px rgba(255,77,79,.55); } }
+  .s-nosignal .icon { background: var(--warn-soft); color: var(--warn); }
+  .floor { font: 700 clamp(36px, 3.4vw, 60px)/1 var(--mono); color: #fff; margin-top: 20px; display: none; }
+  .s-alert .floor { display: block; }
+
+  .side { display: grid; grid-template-rows: auto 1fr; gap: 20px; min-height: 0; }
+
+  /* activity bars */
+  .acts .row { display: grid; grid-template-columns: 150px 1fr 70px; align-items: center; gap: 14px; margin: 12px 0; font-size: 22px; font-weight: 600; }
+  .acts .bar { height: 22px; border-radius: 999px; background: var(--panel2); overflow: hidden; }
+  .acts .bar i { display: block; height: 100%; width: 0; border-radius: 999px; background: var(--move); transition: width .4s ease; }
+  .acts .row.top-act { color: #fff; }
+  .acts .row.lying .bar i { background: var(--alert); }
+  .acts .row.empty .bar i { background: var(--muted); }
+  .acts .pct { font: 600 20px var(--mono); text-align: right; color: var(--muted); }
+
+  /* room / sensing paths */
+  .roomcard { display: flex; flex-direction: column; min-height: 0; }
+  .roomsvg { flex: 1; min-height: 0; width: 100%; }
+  .legend { font-size: 16px; color: var(--muted); }
+
+  /* caregiver notification */
+  .notify { display: none; background: #0f1a2c; border: 2px solid var(--alert); border-radius: 22px; padding: 22px 26px; box-shadow: 0 0 40px rgba(255,77,79,.25); }
+  .notify.show { display: block; animation: slideIn .5s cubic-bezier(.2,.8,.2,1); }
+  @keyframes slideIn { from { transform: translateY(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+  .side.alerting .acts { display: none; }
+  .notify .head { display: flex; align-items: center; gap: 14px; }
+  .notify .avatar { width: 54px; height: 54px; border-radius: 16px; background: var(--alert); display: grid; place-items: center; color: #fff; }
+  .notify .avatar svg { width: 30px; height: 30px; }
+  .notify .who { font-size: 22px; font-weight: 700; }
+  .notify .who small { display: block; font-size: 16px; font-weight: 500; color: var(--muted); }
+  .notify .msg { margin: 14px 0 10px; padding: 14px 16px; background: #1b2840; border-radius: 16px 16px 16px 4px; font-size: 20px; line-height: 1.35; }
+  .steps { list-style: none; margin: 0; padding: 0; font-size: 19px; }
+  .steps li { display: flex; align-items: center; gap: 12px; padding: 6px 0; color: var(--muted); transition: color .3s; }
+  .steps li .tick { width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--line); display: grid; place-items: center; flex: none; transition: all .3s; }
+  .steps li.done { color: var(--ink); }
+  .steps li.done .tick { background: var(--calm); border-color: var(--calm); color: #062b1b; }
+  .steps li.busy .tick { border-color: var(--warn); border-top-color: transparent; animation: spin .8s linear infinite; }
+  .steps li .t { margin-left: auto; font: 16px var(--mono); color: var(--muted); }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .notify button { margin-top: 12px; width: 100%; font: 700 20px var(--font); padding: 14px; border-radius: 14px; border: 0; background: var(--calm); color: #062b1b; cursor: pointer; }
+  .notify button:disabled { background: var(--panel2); color: var(--muted); cursor: default; }
+  .notify .fine { margin-top: 8px; font-size: 13px; color: #6f7f9c; text-align: center; }
+
+  .startbtn { margin-top: 30px; align-self: flex-start; font: 800 clamp(30px, 2.6vw, 44px) var(--font); padding: 22px 56px; border-radius: 22px; border: 0;
+              background: var(--calm); color: #062b1b; cursor: pointer; box-shadow: 0 10px 40px rgba(61,220,151,.3); }
+  .startbtn:hover { filter: brightness(1.08); }
+  .startbtn.hidden, .ctl.hidden { display: none; }
+  .ctl { font: 700 18px var(--font); padding: 9px 18px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); cursor: pointer; }
+  .s-ready .icon { background: var(--calm-soft); color: var(--calm); }
+  .pushed { display: none; margin-top: 18px; align-self: flex-start; font: 700 clamp(20px, 1.6vw, 28px) var(--font); padding: 10px 20px; border-radius: 999px; background: rgba(255,255,255,.12); color: #fff; }
+  .s-alert .pushed.on { display: inline-block; }
+  .calib { position: fixed; inset: 0; background: rgba(8,12,22,.92); display: none; place-items: center; z-index: 10; text-align: center; }
+  .calib.on { display: grid; }
+  .calib h2 { font-size: clamp(48px, 5vw, 96px); margin: 0 0 10px; }
+  .calib p { font-size: clamp(22px, 2vw, 34px); color: var(--muted); margin: 0; }
+  .calib .big { font: 800 clamp(90px, 10vw, 180px)/1 var(--mono); color: var(--calm); margin: 20px 0; }
+  .menuwrap { position: relative; }
+  .arrow { width: 34px; height: 34px; border-radius: 999px; border: 1px solid transparent; background: transparent; color: #3a4866; font-size: 18px; cursor: pointer; }
+  .arrow:hover, .arrow.open { color: var(--ink); border-color: var(--line); background: var(--panel); }
+  .menu { display: none; position: absolute; right: 0; top: 42px; z-index: 20; min-width: 210px; background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 8px; box-shadow: 0 16px 40px rgba(0,0,0,.5); }
+  .menu.open { display: block; }
+  .menu .mhead { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); padding: 8px 10px 4px; }
+  .menu button { display: block; width: 100%; text-align: left; font: 600 16px var(--font); padding: 9px 10px; border: 0; border-radius: 10px; background: transparent; color: var(--ink); cursor: pointer; }
+  .menu button:hover { background: var(--panel2); }
+  /* footer */
+  .foot { display: flex; gap: 26px; align-items: center; font-size: 17px; color: var(--muted); }
+  .foot b { color: var(--ink); font-weight: 600; }
+  .foot .spacer { flex: 1; }
+  @media (max-width: 1100px) { .main { grid-template-columns: 1fr; } body { overflow: auto; } .app { height: auto; } .notify { width: auto; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="top">
+    <div class="brand">Haven<span>.</span></div>
+    <div class="room" id="room">Demo room</div>
+    <div class="spacer"></div>
+    <div class="pill" id="live"><span class="dot"></span><span id="liveText">Connecting…</span></div>
+    <div class="pill">Wi-Fi sensing · no cameras</div>
+    <div class="menuwrap">
+      <button class="arrow" id="menubtn" title="Calibrate / test phone">▾</button>
+      <div class="menu" id="menu">
+        <div class="mhead">Calibrate (20 s each)</div>
+        <button data-cal="empty">Empty room</button>
+        <button data-cal="standing">Standing</button>
+        <button data-cal="walking">Walking</button>
+        <button data-cal="lying">Lying down</button>
+        <div class="mhead">Phone</div>
+        <button id="testpush">Test phone</button>
+      </div>
+    </div>
+    <button class="ctl hidden" id="reset" title="Clear the fall and keep watching (key R)">Reset</button>
+    <button class="ctl hidden" id="stop" title="Back to the start screen">Stop</button>
+    <div class="clock" id="clock">--:--:--</div>
+  </div>
+
+  <div class="main">
+    <section class="card status s-nosignal" id="status">
+      <div class="label">Room status</div>
+      <div class="icon" id="icon"></div>
+      <h1 id="title">Connecting</h1>
+      <div class="sub" id="sub">Waiting for the Wi-Fi sensors</div>
+      <div class="meter" id="meter"><i id="meterFill"></i></div>
+      <div class="floor" id="floor"></div>
+      <div class="pushed" id="pushed"></div>
+      <button class="startbtn" id="start">Start demo</button>
+    </section>
+
+    <div class="side" id="side">
+      <section class="card acts">
+        <div class="label">What the Wi-Fi sees</div>
+        <div id="acts"></div>
+      </section>
+      <section class="card roomcard">
+        <div class="label">Sensing paths</div>
+        <svg class="roomsvg" id="roomsvg" viewBox="0 0 400 260" preserveAspectRatio="xMidYMid meet"></svg>
+        <div class="legend">Brighter path = more movement detected between those two sensors</div>
+      </section>
+    </div>
+  </div>
+
+  <div class="foot">
+    <span>Model: <b id="model">–</b></span>
+    <span>Signal: <b id="signal">–</b></span>
+    <span class="spacer"></span>
+    <span>Prototype · not a medical device</span>
+  </div>
+</div>
+
+<div class="calib" id="calib"><div><h2 id="calT">Leave the room</h2><div class="big" id="calN">5</div><p id="calS">Calibration starts when the countdown ends. Keep the room empty.</p></div></div>
+<script>
+const $ = id => document.getElementById(id);
+const ICONS = {
+  empty: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M10 21v-6h4v6"/></svg>',
+  standing: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="4.5" r="2"/><path d="M12 7v8M8 10h8M12 15l-3 6M12 15l3 6"/></svg>',
+  walking: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="13" cy="4.5" r="2"/><path d="M12 8l-2 6 3 3 1 4M10 14l-3 7M12 8l4 3 3 0M12 8l-4 3-1 3"/></svg>',
+  fall: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="15" r="2"/><path d="M7.5 16h9l4 3M10 16l2-4 4 1M3 21h18"/></svg>',
+  wait: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M5 12.5a10 10 0 0 1 14 0M8.5 16a5 5 0 0 1 7 0M2 9a14.5 14.5 0 0 1 20 0"/><circle cx="12" cy="19.5" r="1"/></svg>',
+};
+const ACT_NAMES = { empty: "Empty", standing: "Standing", walking: "Walking", sitting: "Sitting", lying: "Lying" };
+const fmtClock = t => new Date(t * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+const fmtDur = s => s == null ? "0:00" : `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+
+// Board positions on the schematic (edit when the real room layout is measured).
+const NODES = { "1": [70, 200, "Sensor 1"], "2": [330, 200, "Sensor 2"], "3": [200, 50, "Sensor 3"], "R": [200, 230, "Router"] };
+let pathsBuilt = "";
+function buildPaths(keys) {
+  const svg = $("roomsvg");
+  const used = new Set(keys.flatMap(k => k.split(">")));
+  let h = `<rect x="14" y="14" width="372" height="232" rx="18" fill="none" stroke="#24314d" stroke-width="2" stroke-dasharray="6 6"/>`;
+  for (const k of keys) {
+    const [a, b] = k.split(">"), A = NODES[a], B = NODES[b];
+    if (!A || !B) continue;
+    h += `<line id="p-${k.replace(">", "_")}" x1="${A[0]}" y1="${A[1]}" x2="${B[0]}" y2="${B[1]}" stroke="#5fb4ff" stroke-width="6" stroke-linecap="round" opacity=".25"/>`;
+  }
+  for (const n of used) {
+    const N = NODES[n]; if (!N) continue;
+    h += `<circle cx="${N[0]}" cy="${N[1]}" r="15" fill="#172238" stroke="#3ddc97" stroke-width="3"/><circle cx="${N[0]}" cy="${N[1]}" r="5" fill="#3ddc97"/>`;
+    h += `<text x="${N[0]}" y="${N[1] + (N[1] > 130 ? 36 : -24)}" fill="#8fa0bd" font-size="15" font-weight="600" text-anchor="middle" font-family="Segoe UI, sans-serif">${N[2]}</text>`;
+  }
+  svg.innerHTML = h; pathsBuilt = keys.join();
+}
+
+
+// ---- start / reset / stop (clears any old fall so each take starts clean)
+let started = false;
+const clearFall = () => fetch("/api/reset", { method: "POST", body: "{}" }).catch(() => {});
+function setStarted(on) {
+  started = on;
+  $("start").classList.toggle("hidden", on); $("stop").classList.toggle("hidden", !on); $("reset").classList.toggle("hidden", !on);
+  $("floor").textContent = ""; $("meter").style.display = "";
+}
+$("start").onclick = async () => { await clearFall(); setStarted(true); tick(); };
+$("stop").onclick = () => { fetch("/api/disarm", { method: "POST", body: "{}" }).catch(() => {}); setStarted(false); };
+// ---- calibration menu (small arrow in the top bar): record each state in the exact demo conditions
+const CAL = {
+  empty:    { ask: "Everyone must leave the room for about 25 s.", get: "Leave the room", rec: "Calibrating: empty room", hint: "Stay out of the room", cd: 5 },
+  standing: { ask: "One person stands where they will stand in the demo.", get: "Get in position: stand", rec: "Calibrating: standing", hint: "Stand still where you stand in the demo", cd: 6 },
+  walking:  { ask: "One person walks the demo path for 20 s.", get: "Get ready: walk", rec: "Calibrating: walking", hint: "Keep walking your demo path", cd: 5 },
+  lying:    { ask: "One person lies down at the fall spot and stays down.", get: "Lie down at the fall spot", rec: "Calibrating: lying down", hint: "Stay down; small arm or leg moves are fine", cd: 8 },
+};
+$("menubtn").onclick = e => { e.stopPropagation(); $("menu").classList.toggle("open"); $("menubtn").classList.toggle("open"); };
+document.addEventListener("click", e => { if (!$("menu").contains(e.target)) { $("menu").classList.remove("open"); $("menubtn").classList.remove("open"); } });
+document.querySelectorAll("[data-cal]").forEach(b => b.onclick = async () => {
+  const k = b.dataset.cal, c = CAL[k];
+  $("menu").classList.remove("open"); $("menubtn").classList.remove("open");
+  if (!confirm(`Calibrate ${k}? ${c.ask}`)) return;
+  const r = await (await fetch("/api/calibrate", { method: "POST", body: JSON.stringify({ label: k, seconds: 20, countdown: c.cd }) })).json();
+  if (!r.ok) alert(r.error || "Calibration failed to start");
+});
+let calHideAt = 0;
+function showCal(c) {
+  const el = $("calib"), now = Date.now() / 1000;
+  if (!c) { el.classList.remove("on"); return; }
+  const left = Math.max(0, Math.ceil(c.ends - now));
+  const k = CAL[c.label] ? c.label : "empty", C = CAL[k];
+  if (c.phase === "countdown") { $("calT").textContent = C.get; $("calN").textContent = left; $("calS").textContent = "Recording starts when the countdown ends. " + C.hint + "."; }
+  else if (c.phase === "recording") { $("calT").textContent = C.rec; $("calN").textContent = left; $("calS").textContent = `${C.hint} · ${c.n} readings`; }
+  else if (c.phase === "done") { $("calT").textContent = "Calibration done ✓"; $("calN").textContent = "✓"; $("calS").textContent = `${c.n} readings · model updated`; }
+  else { $("calT").textContent = "Calibration failed"; $("calN").textContent = "!"; $("calS").textContent = c.error || ""; }
+  const recent = c.phase === "countdown" || c.phase === "recording" || now - c.ends < 3;
+  el.classList.toggle("on", recent);
+}
+$("testpush").onclick = async () => { const b = $("testpush"); b.textContent = "Sending…";
+  try { const r = await (await fetch("/api/notify_test", { method: "POST", body: "{}" })).json(); b.textContent = r.ok ? "Sent ✓" : "No topic set"; }
+  catch { b.textContent = "Failed"; } setTimeout(() => b.textContent = "Test phone", 2500); };
+$("reset").onclick = async () => { await clearFall(); tick(); };
+document.addEventListener("keydown", e => {
+  if (e.key === "Enter" || e.key === " ") { e.preventDefault(); started ? null : $("start").click(); }
+  if (e.key === "r" || e.key === "R") $("reset").click();
+  if (e.key === "Escape") $("stop").click();
+  if (e.key === "t" || e.key === "T") $("testpush").click();
+});
+
+function setStatus(cls, icon, title, sub) {
+  const st = $("status");
+  st.className = "card status " + cls;
+  if ($("icon").dataset.k !== icon) { $("icon").innerHTML = ICONS[icon]; $("icon").dataset.k = icon; }
+  $("title").textContent = title; $("sub").textContent = sub;
+}
+
+async function tick() {
+  $("clock").textContent = fmtClock(Date.now() / 1000);
+  let s;
+  try { s = await (await fetch("/api/state", { cache: "no-store" })).json(); }
+  catch { $("live").className = "pill off"; $("liveText").textContent = "Server offline"; return; }
+  showCal(s.calibration);
+  const L = s.live, live = L.mode === "LIVE";
+  $("live").className = "pill" + (live ? "" : " off"); $("liveText").textContent = live ? "Live" : "No signal";
+  $("room").textContent = L.room;
+
+  if (!started) { setStatus(live && L.model_trained ? "s-ready" : "s-nosignal", live ? "standing" : "wait", "Ready",
+      !live ? "Waiting for the Wi-Fi sensors" : !L.model_trained ? "Record training data first" : "Press Start to begin fall detection"); $("floor").textContent = ""; }
+  else if (!live) setStatus("s-nosignal", "wait", "No signal", "Check that the Wi-Fi sensors are powered");
+  else if (!L.model_trained) setStatus("s-nosignal", "wait", "Not trained", "Record training data first");
+  else if (L.state === "alert") {
+    setStatus("s-alert", "fall", "FALL DETECTED", `${L.room} · on the floor since ${fmtClock(L.fall_time || L.since)}`);
+    $("floor").textContent = `On the floor ${fmtDur(L.on_floor_s)}`;
+    $("pushed").textContent = L.pushed ? `📱 Phone notified · ${fmtClock(L.pushed)}` : "";
+    $("pushed").classList.toggle("on", !!L.pushed);
+  } else if (L.state === "fall_suspected") {
+    setStatus("s-fall_suspected", "fall", "Possible fall", "Person on the floor · checking…");
+    $("meterFill").style.width = Math.min(100, 100 * (L.on_floor_s || 0) / (L.long_lie_s || 3)) + "%";
+  } else {
+    // not in a fall: follow the model's live best guess so the card updates immediately
+    const b = (s.estimate || {}).best || (L.state === "empty" ? "empty" : L.activity);
+    if (b === "walking") setStatus("s-active", "walking", "Person walking", "All normal");
+    else if (b === "standing" || b === "sitting") setStatus("s-active", "standing", "Person standing", "All normal");
+    else if (b === "lying" || b === "fall") setStatus("s-fall_suspected", "fall", "Person lying down", "Watching…");
+    else setStatus("s-empty", "empty", "Room empty", "No one detected");
+  }
+
+
+  // activity bars
+  const e = s.estimate || {}, P = e.probs || {};
+  const order = ["empty", "standing", "walking", "lying"].filter(k => k in P || !Object.keys(P).length);
+  const best = e.best;
+  $("acts").innerHTML = order.map(k => `<div class="row ${k}${k === best ? " top-act" : ""}"><span>${ACT_NAMES[k]}</span><div class="bar"><i style="width:${(100 * (P[k] || 0)).toFixed(0)}%"></i></div><span class="pct">${(100 * (P[k] || 0)).toFixed(0)}%</span></div>`).join("");
+
+  // sensing paths
+  const keys = Object.keys(s.links).sort();
+  if (keys.join() !== pathsBuilt) buildPaths(keys);
+  let pps = [];
+  for (const k of keys) {
+    const l = s.links[k], el = document.getElementById("p-" + k.replace(">", "_"));
+    pps.push(l.pps);
+    if (el) { const m = Math.max(0, Math.min(1, (l.motion - 0.03) / 0.2)); el.setAttribute("opacity", (0.18 + 0.82 * m).toFixed(2)); el.setAttribute("stroke-width", (5 + 7 * m).toFixed(1)); el.setAttribute("stroke", L.state === "alert" ? "#ff4d4f" : "#5fb4ff"); }
+  }
+  $("signal").textContent = keys.length ? `${keys.length} sensing paths · ${Math.round(pps.reduce((a, b) => a + b, 0))} readings/s` : "–";
+  const d = s.data;
+  $("model").textContent = d && d.trained ? (d.test ? `trained · ${(100 * d.test.acc).toFixed(0)}% on held-out test` : "trained") : "not trained";
+}
+tick(); setInterval(tick, 400);
+</script>
+</body>
+</html>

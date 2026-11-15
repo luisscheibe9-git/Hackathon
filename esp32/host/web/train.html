@@ -51,15 +51,17 @@
   <div class="grid" style="margin-top:16px">
     <section class="card" style="grid-column: span 2; min-width: 300px">
       <h2>Guided recording</h2>
-      <div id="prompt" class="prompt"><span class="count" id="count"></span><div class="big" id="pTitle">Ready</div><div id="pText" class="muted">Start the camera, calibrate, then record training (3 rounds, about 8 minutes) and a separate test round.</div></div>
+      <div id="prompt" class="prompt"><span class="count" id="count"></span><div class="big" id="pTitle">Ready</div><div id="pText" class="muted">Start the camera, calibrate, then record training (4 rounds, about 9 minutes; the demo routine: empty, stand, walk, fall and stay down) and a separate test round.</div></div>
       <div class="row" style="margin-top:10px">
-        <button id="recTrain" class="primary" disabled>Record training (3 rounds)</button>
+        <button id="recTrain" class="primary" disabled>Record training (4 rounds)</button>
         <button id="recTest" disabled>Record test (1 round)</button>
         <button id="recFree" disabled>Free recording (camera labels)</button>
         <button id="stop" disabled>Stop</button>
         <label class="small"><input type="checkbox" id="speak" checked> speak prompts</label>
+        <label hidden class="small" title="3 falls per round onto a thick mat. Untick if there is no mat or anyone is unsure."><input type="checkbox" id="withFalls"> include falls (thick mat only)</label>
       </div>
       <p class="small muted" id="recStatus"></p>
+      <p id="linkWarn" hidden style="color:#fff;background:#b3261e;padding:8px 12px;border-radius:8px;font-weight:600"></p>
     </section>
     <section class="card">
       <h2>Dataset</h2>
@@ -92,20 +94,27 @@ const MODEL_LOCAL = `${LOCAL}/pose_landmarker_full.task`,
       MODEL_CDN = "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/1/pose_landmarker_full.task";
 
 // ---------------------------------------------------------------- guided plan
-const STEPS = [
-  { label: "empty",    title: "Leave the room",   text: "Step outside and close the door. Out of view is not enough: WiFi still senses you.", lead: 8, secs: 20 },
-  { label: "standing", title: "Stand still",      text: "Stand in the middle of the room, arms relaxed.", lead: 8, secs: 15 },
-  { label: "walking",  title: "Walk around",      text: "Walk around the room at a normal pace.", lead: 4, secs: 20 },
-  { label: "sitting",  title: "Sit on the chair", text: "Sit down and stay seated. Shift a little now and then.", lead: 5, secs: 15 },
-  { label: "lying",    title: "Lie on the mat",   text: "Lie down on the mat slowly and stay still.", lead: 6, secs: 15 },
-  { label: "fall",     title: "Fall onto the mat", text: "Get up. At zero, fall onto the mat (knees first), then stay down.", lead: 8, secs: 10 },
-  { label: "fall",     title: "Fall again",       text: "Get up. At zero, fall onto the mat in a different direction, then stay down.", lead: 8, secs: 10 },
+// Lying-focused routine (~3 min per round). Classes: empty, standing, walking, lying.
+// Lying = possible fall, then FALL ALERT after 3 s (config.yaml). Empty is kept short (it is stable);
+// most of the time goes to lying in different positions and spots so the model learns it well.
+const STEPS = [   // demo-focused routine (Nov 15): rehearse exactly what the demo video shows
+  { label: "empty",    title: "Leave the room",          text: "Everyone steps outside (camera person too, or stand where you will film from).", lead: 8, secs: 20 },
+  { label: "standing", title: "Stand still",             text: "Stand where you will stand in the demo, arms relaxed.", lead: 8, secs: 12 },
+  { label: "walking",  title: "Walk around",             text: "Walk the path you will walk in the demo, normal pace.", lead: 4, secs: 15 },
+  { label: "standing", title: "Stand at the fall spot",  text: "Stand still next to the demo fall spot.", lead: 4, secs: 8 },
+  { label: "lying",    title: "Fall and stay down",      text: "Do the demo fall: go down at the fall spot and stay down.", lead: 4, secs: 15 },
+  { label: "lying",    title: "Lie on your side",        text: "Roll onto your side at the fall spot, stay down.", lead: 4, secs: 15 },
+  { label: "lying",    title: "Lie still, small moves",  text: "Stay down; move an arm or leg a little now and then, like someone hurt.", lead: 3, secs: 15 },
 ];
+
+// Falls are the core of training (3 per round). Untick the box if there is no thick mat.
+const activeSteps = () => STEPS.filter(s => s.label !== "fall" || $("withFalls").checked);
 
 // ---------------------------------------------------------------- pose → label
 const NOSE = 0, LS = 11, RS = 12, LH = 23, RH = 24, LK = 25, RK = 26, LA = 27, RA = 28;
 const hist = [];                 // per frame features, last 3 s
 let calib = null, calibrating = null, lastFall = 0, fallShowUntil = 0, aspect = 16 / 9;
+let fallStepStart = 0, fallStepHandled = true;   // prompt-timed fall labelling (see camera loop)
 const vis = (p, i) => p[i] && (p[i].visibility ?? 1) > 0.5;
 const P = (p, i) => ({ x: p[i].x * aspect, y: p[i].y });          // units: image heights
 const mid = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
@@ -223,8 +232,21 @@ function loop() {
       if (f.present && f.thigh && f.footY) calibrating.push(f);
       if (now > calibrating.until) finishCalib();
     }
-    const fall = detectFall(now);
+    let fall = detectFall(now);
     const c = classify(now);
+    // During a prompted fall step: if the camera's fast-drop rule fires, use it. If it has not fired
+    // 4 s after "Now" but the person is down (lying), label the first 3.5 s after "Now" as the fall.
+    if (session && session.prompt === "fall" && !session.paused && !fallStepHandled) {
+      if (fall) fallStepHandled = true;
+      else if (now - fallStepStart > 4000) {
+        fallStepHandled = true;
+        if (c.label === "lying") {
+          const ago = (now - fallStepStart) / 1000;
+          fall = [ago, Math.max(0, ago - 3.5)];
+          lastFall = now; fallShowUntil = now + 1500;
+        }
+      }
+    }
     camLabel = now < fallShowUntil ? "fall" : c.label;
     $("camLabel").textContent = camLabel; $("camWhy").textContent = now < fallShowUntil ? "hips dropped fast" : c.why;
     if (now - lastPost > 100 || fall) {
@@ -258,7 +280,8 @@ async function startSession(kind, rounds) {
   const r = await post("/api/rec", { on: true, session: kind === "free" ? "train" : kind, round: 1, prompt: kind === "free" ? "" : STEPS[0].label });
   if (!r.ok) { $("recStatus").textContent = r.error; return; }
   const plan = [];
-  if (kind !== "free") for (let i = 1; i <= rounds; i++) STEPS.forEach(s => plan.push({ ...s, round: i }));
+  const steps = activeSteps();
+  if (kind !== "free") for (let i = 1; i <= rounds; i++) steps.forEach((s, j) => plan.push({ ...s, round: i, step: j + 1, of: steps.length }));
   session = { kind, plan, i: -1, phase: "lead", left: 0, prompt: kind === "free" ? "" : STEPS[0].label, paused: kind !== "free" };
   ["recTrain", "recTest", "recFree"].forEach(id => $(id).disabled = true); $("stop").disabled = false;
   if (kind === "free") { $("pTitle").textContent = "Free recording"; $("pText").textContent = "Do anything; the camera labels every moment it is confident about. Press Stop when done."; $("prompt").className = "prompt"; return; }
@@ -272,7 +295,7 @@ async function next() {
   const s = session.plan[session.i];
   if (s.round !== (session.plan[session.i - 1] || {}).round) await post("/api/rec", { on: true, session: session.kind, round: s.round, prompt: s.label });
   Object.assign(session, { phase: "lead", left: s.lead, prompt: s.label, paused: true });
-  $("prompt").className = "prompt lead"; $("pTitle").textContent = `Next: ${s.title}`; $("pText").textContent = `${s.text} (round ${s.round}, step ${session.i % STEPS.length + 1}/${STEPS.length})`;
+  $("prompt").className = "prompt lead"; $("pTitle").textContent = `Next: ${s.title}`; $("pText").textContent = `${s.text} (round ${s.round}, step ${s.step}/${s.of})`;
   say(`${s.title}. ${s.text}`);
 }
 
@@ -284,7 +307,7 @@ function stepTick() {
   if (session.phase === "lead") {
     Object.assign(session, { phase: "rec", left: s.secs, paused: false });
     $("prompt").className = "prompt"; $("pTitle").textContent = s.title; beep(990, 200);
-    if (s.label === "fall") say("Now");
+    if (s.label === "fall") { say("Now"); fallStepStart = performance.now(); fallStepHandled = false; }
   } else { beep(440, 200); next(); }
 }
 
@@ -296,7 +319,7 @@ async function stopSession(done) {
   $("pTitle").textContent = done ? "Done" : "Stopped"; $("pText").textContent = "Saved. Check the dataset counts; top up any movement that is short with free recording.";
   say(done ? "Recording finished" : "Stopped");
 }
-$("recTrain").onclick = () => startSession("train", 3);
+$("recTrain").onclick = () => startSession("train", 4);
 $("recTest").onclick = () => startSession("test", 1);
 $("recFree").onclick = () => startSession("free", 0);
 $("stop").onclick = () => stopSession(false);
@@ -304,16 +327,23 @@ $("clearTest").onclick = () => confirm("Delete the test session?") && post("/api
 $("clearAll").onclick = () => confirm("Delete all recorded windows (training and test)?") && post("/api/clear", {});
 
 // ---------------------------------------------------------------- server state
-const LABELS = ["empty", "standing", "walking", "sitting", "lying", "fall"];
+const LABELS = ["empty", "standing", "walking", "lying"];  // 4-class routine (Nov 14 pivot)
 async function poll() {
   let s; try { s = await (await fetch("/api/state")).json(); } catch { return; }
-  const n = Object.values(s.links).filter(l => l.pps >= 5).length;
+  const n = Object.values(s.links).filter(l => l.pps >= 3).length;
   $("links").textContent = n ? `${n} link${n > 1 ? "s" : ""} live` : "no links"; $("links").className = "badge " + (n ? "live" : "off");
   const d = s.data, c = d.counts;
   $("counts").innerHTML = `<tr><th></th><th class="num">train</th><th class="num">test</th></tr>` +
     LABELS.map(l => `<tr><td>${l}</td><td class="num">${(c.train || {})[l] || 0}</td><td class="num">${(c.test || {})[l] || 0}</td></tr>`).join("") +
     `<tr><td class="muted">links</td><td colspan="2" class="num">${(d.ids || []).join(" ") || "–"}</td></tr>`;
   if (d.recording) $("recStatus").textContent = `Recording ${d.recording.session}, round ${d.recording.round}: ${d.recording.n} windows saved` + (d.recording.skipped ? `, ${d.recording.skipped} skipped (camera unsure, paused, or a link silent)` : "");
+  // Loud warning if a recorded link goes silent: its windows are skipped, so that step is lost.
+  const silent = (d.ids || []).filter(k => !s.links[k] || s.links[k].pps < 1);
+  const warn = $("linkWarn");
+  if (silent.length && (d.recording || !d.ids)) {
+    warn.hidden = false;
+    warn.textContent = `WiFi link${silent.length > 1 ? "s" : ""} ${silent.join(", ")} silent: nothing is being saved. Pause, check the boards, then redo this step.`;
+  } else warn.hidden = true;
   const e = s.estimate;
   $("wifiLabel").textContent = e && e.best ? e.best : "–";
   $("wifiConf").textContent = e && e.best ? `${(100 * e.confidence).toFixed(0)}% confident` : (e ? e.status : "train a model first");
