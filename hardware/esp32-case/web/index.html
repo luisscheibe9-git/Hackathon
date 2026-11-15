@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sensor assembly — scroll demo</title>
+<style>
+  :root { --ivory:#f6f3eb; --graphite:#30352f; --muted:#777b71; --sage:#7d8878; --amber:#a17b44;
+          --serif:Georgia,'Times New Roman',serif; --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--ivory); color: var(--graphite); font-family: var(--sans); -webkit-font-smoothing: antialiased; }
+  .intro, .outro { min-height: 70vh; display: grid; place-content: center; text-align: center; padding: 0 24px; }
+  .eyebrow { font-size: 10px; letter-spacing: .2em; font-weight: 500; color: var(--muted); }
+  h1, h2 { font-family: var(--serif); font-weight: 400; letter-spacing: -.045em; margin: 14px 0 0; }
+  h1 { font-size: clamp(40px, 6vw, 72px); line-height: 1.02; }
+  h2 { font-size: clamp(30px, 4vw, 48px); }
+  em { color: var(--sage); }
+
+  /* --- the assembly section: height = scroll distance --- */
+  .assembly { height: 420vh; position: relative; }
+  .assembly-stage { position: sticky; top: 0; height: 100vh; overflow: hidden; }
+  .assembly-stage canvas { position: absolute; inset: 4vh 0 0 0; width: 100%; height: 92vh; }
+  .assembly-caption { position: absolute; left: clamp(24px, 7vw, 110px); bottom: 12vh; max-width: 340px; margin: 0;
+                      opacity: 0; transform: translateY(12px); transition: opacity .45s ease, transform .45s ease; }
+  .assembly-caption.is-active { opacity: 1; transform: none; }
+  .assembly-caption strong { display: block; font-family: var(--serif); font-weight: 400; font-size: clamp(24px, 2.6vw, 34px);
+                             letter-spacing: -.03em; margin-top: 8px; }
+  .assembly-caption span.eyebrow { color: var(--amber); }
+  @media (max-width: 700px) {
+    .assembly { height: 320vh; }
+    .assembly-stage canvas { inset: 0; height: 70vh; top: 6vh; }
+    .assembly-caption { bottom: 8vh; right: 24px; }
+  }
+  @media (prefers-reduced-motion: reduce) { .assembly-caption { transition: none; transform: none; } }
+</style>
+</head>
+<body>
+  <section class="intro">
+    <span class="eyebrow">INSIDE THE SENSOR</span>
+    <h1>Everything it needs.<br><em>Nothing it doesn't.</em></h1>
+    <p class="eyebrow" style="margin-top:28px">SCROLL TO ASSEMBLE ↓</p>
+  </section>
+
+  <section class="assembly" aria-label="Animated assembly of the sensor enclosure">
+    <div class="assembly-stage">
+      <canvas role="img" aria-label="Exploded view of the sensor assembling: case, ESP32 board, USB cable, charger and lid with internal antenna"></canvas>
+      <p class="assembly-caption" data-from="1" data-to="9"><span class="eyebrow">01 / THE PARTS</span><strong>Five parts. One small device.</strong></p>
+      <p class="assembly-caption" data-from="10" data-to="27"><span class="eyebrow">02 / THE BRAIN</span><strong>ESP32 with Wi-Fi + Bluetooth.</strong></p>
+      <p class="assembly-caption" data-from="28" data-to="41"><span class="eyebrow">03 / POWER</span><strong>A short USB lead, tucked away.</strong></p>
+      <p class="assembly-caption" data-from="42" data-to="63"><span class="eyebrow">04 / MOUNTING</span><strong>Slides onto a standard USB charger.</strong></p>
+      <p class="assembly-caption" data-from="64" data-to="83"><span class="eyebrow">05 / SIGNAL</span><strong>The 2.4 GHz antenna lives in the lid.</strong></p>
+      <p class="assembly-caption" data-from="84" data-to="96"><span class="eyebrow">06 / DONE</span><strong>Plug it into the wall. That's it.</strong></p>
+    </div>
+  </section>
+
+  <section class="outro">
+    <span class="eyebrow">END OF DEMO</span>
+    <h2>Scroll back up to <em>take it apart.</em></h2>
+  </section>
+
+  <script src="assembly-scroll.js"></script>
+  <script>
+    mountAssembly(document.querySelector('.assembly'), { src: 'frames/frame_%03d.webp', count: 96 });
+  </script>
+</body>
+</html>
