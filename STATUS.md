@@ -73,3 +73,9 @@ Both independent clones completed; their main revisions matched GitHub and worki
 - Latest user wants newest website information and a stronger helping-people story, with permission to remake all sections except the real demo. Editor found website main3761a81 with real build/training photos, staff conversation and proposed pilot. Preserve real demo at original speed; use concise human-centered copy, no unsupported results.
 - Additional requirement: final encoded frame must show a large scannable QR linking to https://haven-public-ten.vercel.app, held several seconds, no fade to black. Verify QR URL.
 - Existing /root/video_editor owns revision4 render, subtitles, updated voice kit and Downloads exports. Preserve v3. Quota90% used at start, conserve remaining allowance. Main will review completed output.
+
+## Revision4 delivered
+- Downloads/Haven - Challenge Film v4.mp4 and matching Clean Picture v4.mp4, Editable Project v4.zip, Captions v4.srt, Scratch Narration v4.wav, Voiceover Script v4.txt, Voiceover Recorder v4.html are ready. Prior versions preserved.
+- Uses latest Haven main3761a81: real staff visit, build/training photos, privacy benefits, continuous original demo, caregiver room-alert benefit and explicitly proposed pilot metrics. Main reviewed panel contact sheet. Final four seconds hold large website QR; actual final encoded frames of both exports decoded to https://haven-public-ten.vercel.app.
+- Verification: full decode both exports117.500s/3525frames1080p, fresh edit ZIP CRC passed and QR included. Current recorder HTTP200 at http://127.0.0.1:8941/Haven%20-%20Voiceover%20Recorder%20v4.html. Use v4 script for recording; older scripts superseded.
+- Primary quota97% used at completion. Preserve remaining allowance. Await user's recording or feedback. Video source remains local/uncommitted; only STATUS handoff pushed. No publishing/submission.
