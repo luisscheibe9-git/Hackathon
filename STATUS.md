@@ -86,3 +86,5 @@ Both independent clones completed; their main revisions matched GitHub and worki
 - Downloads contains Haven - Challenge Film v5.mp4, Haven - Clean Picture v5.mp4, Haven - Editable Project v5.zip, Haven - Captions v5.srt, Haven - Scratch Narration v5.wav, Haven - Voiceover Recorder v5.html, and Haven - Voiceover Script v5.txt. Versions 1–4 are preserved.
 - Verified complete video decode, 3,525 frames at 1080p30 and 117.500 seconds. Checked cut boundary frames and all 21 caption cues. Both final encoded frames scan to https://haven-public-ten.vercel.app. ZIP CRC and eleven picture entries passed.
 - Recorder and matching silent guide are served at http://127.0.0.1:8941/Haven%20-%20Voiceover%20Recorder%20v5.html . Use the v5 script. This edit has scratch narration and has not been published or submitted.
+
+- V5 recorder now has Redo: discards current take, resets guide/cues and restarts three-second countdown. Updated source template, generated export and Downloads HTML. Verified with synthetic microphone in isolated Chrome during recording, after stop and during countdown. Refresh recorder page to load. Existing edit ZIP predates this recorder-only change.
