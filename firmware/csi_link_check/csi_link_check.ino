@@ -11,6 +11,10 @@ const char *standaloneSsid = "Stillpoint-CSI";
 const uint8_t board2[] = {0x68, 0x09, 0x47, 0x9f, 0x27, 0xf4};
 const uint8_t board3[] = {0x68, 0x09, 0x47, 0x1a, 0x80, 0xac};
 bool capturePeer = false;
+int joinFailures = 0;
+// Demo self-recovery: a receiver that hears no CSI for this long (gateway reset when the laptop
+// opened its serial port, power blip) reboots itself and rejoins, instead of needing EN pressed.
+const unsigned long kSilentRebootMs = 10000;
 
 struct CsiSample {
   uint32_t timestamp;
@@ -70,8 +74,16 @@ void loop() {
   if (WiFi.status() != WL_CONNECTED) {
     Serial.printf("JOIN_FAILED status=%d\n", WiFi.status());
     WiFi.disconnect();
+    // Demo self-recovery: after 3 failed joins in a row (gateway rebooted or off), do a clean
+    // reboot. This is what pressing EN by hand used to fix.
+    if (++joinFailures >= 3) {
+      Serial.println("REBOOT join failed 3 times");
+      delay(100);
+      ESP.restart();
+    }
     return;
   }
+  joinFailures = 0;
 
   Serial.printf("JOINED ip=%s gateway=%s channel=%d rssi=%d\n",
                 WiFi.localIP().toString().c_str(), WiFi.gatewayIP().toString().c_str(),
@@ -105,7 +117,13 @@ void loop() {
     probe.begin(50001);
     esp_wifi_get_mac(WIFI_IF_STA, relay + 1);
   }
+  unsigned long lastSample = millis();
   while (WiFi.status() == WL_CONNECTED) {
+    if (standalone && millis() - lastSample > kSilentRebootMs) {
+      Serial.println("REBOOT no CSI for 10 s");
+      delay(100);
+      ESP.restart();
+    }
     if (peerProbeReady && millis() - lastPeerProbe >= 40) {
       lastPeerProbe = millis();
       const uint8_t signal[] = {'C', 'S', 'I'};
@@ -123,6 +141,7 @@ void loop() {
     }
     CsiSample sample;
     if (xQueueReceive(samples, &sample, pdMS_TO_TICKS(20))) {
+      lastSample = millis();
       if (standalone) {
         relay[0] = sample.peer ? 'P' : 'C';
         relay[7] = static_cast<uint8_t>(sample.rssi);

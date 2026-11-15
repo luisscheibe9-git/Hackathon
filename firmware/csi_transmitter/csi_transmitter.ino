@@ -14,9 +14,13 @@ void setup() {
   WiFi.persistent(false);
   WiFi.mode(WIFI_AP);
   if (!WiFi.softAP("Stillpoint-CSI", "stillpoint-demo", 6)) {
-    Serial.println("Failed to start Stillpoint-CSI");
-    return;
+    Serial.println("Failed to start Stillpoint-CSI, rebooting");
+    delay(1000);
+    ESP.restart();  // demo self-recovery: retry from a clean boot instead of sitting dead
   }
+  // Demo self-recovery: if loop() ever hangs for ~5 s, the chip resets itself. Receivers #2/#3
+  // notice the silence and reboot too (see csi_link_check.ino), so the whole set rejoins alone.
+  enableLoopWDT();
   esp_wifi_set_bandwidth(WIFI_IF_AP, WIFI_BW_HT20);
   started = traffic.begin(50000);
   Serial.println("Stillpoint-CSI transmitting on channel 6 when receivers join");
