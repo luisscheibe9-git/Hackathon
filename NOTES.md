@@ -139,3 +139,7 @@ Hackathon project: 3x ESP32 Wi-Fi CSI sensing to detect falls of elderly residen
 - Nov 15 ~00:30 DEMO MODEL = 3 classes (empty / walking / lying). The standing re-record was bogus (nobody stood; it recorded the room) → removed all standing windows (backup `haven_dataset-setup5-bad-standing.npz`). Real held-out test round: 98% (empty 100, lying 100, walking 91), LORO 94%. demo.html shows any movement as "Person walking". Caveat: no standing class → standing still or sitting reads as lying → alert. Demo script: empty → walk in → fall → stay down; keep moving otherwise.
 - Nov 15 ~00:45 per-state calibration: demo.html top-bar ▾ arrow (nearly invisible) opens menu: Calibrate Empty room / Standing / Walking / Lying down (20 s each, countdown, full-screen instructions) + Test phone. Server: `Dataset.CAL_ROUNDS` (empty 99, standing 96, walking 95, lying 94), each calibration replaces that state's last one; calibration windows weighted 3x (`CAL_WEIGHT`) and not balanced away. Standing exists again only via calibration.
 - Nov 15 ~00:55: calibration now REPLACES a state's training data (old windows of a calibrated state are dropped); all old calibrations cleared. Calibrate all 4 states → model is calibration-only.
+
+## Website (Nov 15)
+- Live site: https://haven-public-ten.vercel.app. Code is on the `website` branch here (`safer/public/`), mirrored from Aouzzo/Haven, which Vercel deploys. Push site changes to both.
+- README now maps where every part of the project lives (branches and folders) and lists the AI tools used.
