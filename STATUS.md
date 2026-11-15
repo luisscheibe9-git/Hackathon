@@ -88,3 +88,15 @@ Both independent clones completed; their main revisions matched GitHub and worki
 - Recorder and matching silent guide are served at http://127.0.0.1:8941/Haven%20-%20Voiceover%20Recorder%20v5.html . Use the v5 script. This edit has scratch narration and has not been published or submitted.
 
 - V5 recorder now has Redo: discards current take, resets guide/cues and restarts three-second countdown. Updated source template, generated export and Downloads HTML. Verified with synthetic microphone in isolated Chrome during recording, after stop and during countdown. Refresh recorder page to load. Existing edit ZIP predates this recorder-only change.
+
+## Revision 6 delivered — November 15
+
+- User’s original browser recording preserved at video/assets/Haven - Your Voice v5.webm. V6 uses that voice. The requested through-wall testing sentence was removed between speech pauses with short fades. The factual Wi-Fi propagation sentence remains in narration, captions and on-screen text. No new performance claim.
+- Downloads contains Haven - Challenge Film v6.mp4, Haven - Clean Picture v6.mp4, Haven - Editable Project v6.zip, Haven - Captions v6.srt, and Haven - Recorded Narration v6.wav. Clean v6 contains the user’s narration without burned-in captions. Older outputs preserved.
+- Retimed all 21 cues against local transcription and waveform boundaries. The edited excerpt’s local transcription confirms the adjacent Wi-Fi and demo phrases remain. Both MP4s decoded fully at 1080p30, 3,525 frames and 117.500 seconds. Both final QR frames scan to the website. ZIP CRC and copied-file hashes passed.
+- Keep work local unless explicitly authorized to publish or submit. See video/README.md and render_recorded.py for rebuild instructions.
+
+## Revision6 delivered with team voice
+- Downloads/Haven - Challenge Film v6.mp4 now uses Luis's saved Haven - Your Voice v5.webm. Original retained in project. Clean Picture v6.mp4 also includes recorded voice; Editable Project v6.zip, Captions v6.srt and Recorded Narration v6.wav delivered.
+- User requested removal of through-wall testing sentence. Removed from panel/captions and muted only spoken phrase between pauses46.38–49.16s with fades. Retained neutral Wi-Fi propagation sentence; no new detection claims. Local ASR verified adjacent speech preserved and deleted sentence absent.
+- All21subtitle cues retimed to actual speech. Both exports fully decoded117.500s/3525frames1080p30; final QR decoded correctly; archiveCRC/voice track and Downloads hashes verified. Real demo and QR unchanged. Await user review; no publication/submission.
