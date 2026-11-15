@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Haven live</title>
+<style>
+  :root { --bg:#0b1117; --card:#131c25; --line:#243241; --text:#e8eef4; --muted:#8aa0b4;
+          --ok:#3ecf8e; --warn:#f5b041; --bad:#ff5b5b; --info:#5aa9ff; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:16px/1.5 system-ui, sans-serif; }
+  main { max-width:960px; margin:0 auto; padding:24px 16px 40px; }
+  header { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; }
+  h1 { font-size:22px; margin:0; font-weight:600; letter-spacing:.02em; }
+  .sub { color:var(--muted); font-size:14px; }
+  #status { margin:20px 0; border-radius:16px; padding:36px 20px; text-align:center; background:var(--card);
+            border:2px solid var(--line); transition:background .3s, border-color .3s; }
+  #title { font-size:clamp(34px, 7vw, 64px); font-weight:700; margin:0; }
+  #detail { color:var(--muted); font-size:18px; min-height:27px; }
+  #status.empty { border-color:var(--line); }
+  #status.standing { border-color:var(--ok); background:#10261c; }
+  #status.lying { border-color:var(--warn); background:#2a2010; }
+  #status.alert { border-color:var(--bad); background:#3a1212; animation:pulse 1s infinite; }
+  #status.idle { border-color:var(--info); }
+  @keyframes pulse { 50% { background:#5a1515; } }
+  .paths { display:grid; gap:12px; }
+  .path { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 16px; }
+  .row { display:flex; justify-content:space-between; gap:8px; font-size:14px; color:var(--muted); }
+  .row b { color:var(--text); font-weight:600; }
+  .bar { position:relative; height:22px; background:#0d151d; border-radius:6px; margin-top:8px; overflow:hidden; }
+  .fill { height:100%; width:0; background:var(--muted); transition:width .2s, background .2s; }
+  .fill.on { background:var(--ok); }
+  .thr { position:absolute; top:0; bottom:0; width:2px; background:var(--text); opacity:.8; }
+  .controls { display:flex; flex-wrap:wrap; gap:8px; margin-top:16px; }
+  button { background:#1d2a37; color:var(--text); border:1px solid var(--line); border-radius:8px;
+           padding:10px 14px; font:inherit; cursor:pointer; }
+  button:hover { border-color:var(--info); }
+  button.primary { background:#1f4f86; border-color:#2e6db3; }
+  #cal { margin-top:12px; color:var(--muted); font-size:15px; min-height:24px; }
+  #cal.failed { color:var(--bad); }
+  #sim { display:none; margin-top:12px; padding:10px; border:1px dashed var(--warn); border-radius:8px; color:var(--warn); }
+  kbd { border:1px solid var(--line); border-radius:4px; padding:0 5px; font-size:13px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div><h1>Haven · Room 1</h1><div class="sub">Camera-free fall detection with two Wi-Fi paths</div></div>
+    <div class="sub" id="clock"></div>
+  </header>
+
+  <section id="status" class="idle" aria-live="polite">
+    <p id="title">Starting</p>
+    <div id="detail">Waiting for the sensors</div>
+  </section>
+
+  <section class="paths">
+    <div class="path" id="p-top"></div>
+    <div class="path" id="p-bottom"></div>
+  </section>
+
+  <div class="controls">
+    <button class="primary" data-cmd="calibrate">Calibrate empty room <kbd>C</kbd></button>
+    <button data-cmd="lying">Check lying <kbd>L</kbd></button>
+    <button data-cmd="reset">Reset <kbd>R</kbd></button>
+    <button data-cmd="phone">Test phone <kbd>T</kbd></button>
+  </div>
+  <div id="cal"></div>
+  <div id="sim">SIMULATION (no boards):
+    <button data-cmd="empty">Empty</button> <button data-cmd="standing">Standing</button>
+    <button data-cmd="lying_sim">Lying</button></div>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const LABEL = { top: "Top path", bottom: "Bottom path" };
+const TEXT = {
+  uncalibrated: ["Calibrate first", "Clear the area, then press C"],
+  no_signal: ["Sensor offline", "A board stopped sending. It reboots itself; wait 15 s"],
+  empty: ["Room empty", "No one on either path"],
+  standing: ["Person standing", "Top path disturbed"],
+  lying: ["Person on the floor", "Only the bottom path is disturbed"],
+  alert: ["FALL DETECTED", "Caregiver alerted"],
+};
+async function post(cmd) { await fetch("/api/" + cmd, { method: "POST" }); refresh(); }
+document.querySelectorAll("button[data-cmd]").forEach(b => b.onclick = () => post(b.dataset.cmd));
+addEventListener("keydown", e => {
+  const k = { c: "calibrate", l: "lying", r: "reset", t: "phone" }[e.key.toLowerCase()];
+  if (k && !e.repeat) post(k);
+});
+function drawPath(role, p) {
+  const max = Math.max(6, p.threshold * 2);
+  const score = p.score == null ? 0 : p.score;
+  const on = p.score != null && score > p.threshold;
+  $("p-" + role).innerHTML =
+    `<div class="row"><span><b>${LABEL[role]}</b> · #1 → #${p.board}</span>` +
+    `<span>${p.pps} packets/s · ${p.score == null ? "no data" : (on ? "DISTURBED" : "quiet")}</span></div>` +
+    `<div class="bar"><div class="fill ${on ? "on" : ""}" style="width:${Math.min(100, 100 * score / max)}%"></div>` +
+    `<div class="thr" style="left:${100 * p.threshold / max}%"></div></div>`;
+}
+async function refresh() {
+  let s;
+  try { s = await (await fetch("/api/state")).json(); } catch { $("title").textContent = "Server stopped"; return; }
+  const [title, detail] = TEXT[s.state] || [s.state, ""];
+  $("status").className = s.state in { empty: 1, standing: 1, lying: 1, alert: 1 } ? s.state : "idle";
+  $("title").textContent = title;
+  $("detail").textContent = s.state === "lying"
+    ? `Fall alert in ${Math.max(0, s.lie_seconds - s.lying_for).toFixed(1)} s`
+    : s.state === "alert" && s.alert_at
+      ? `${detail} at ${new Date(s.alert_at * 1000).toLocaleTimeString()}${s.phone ? " · phone notified" : ""}`
+      : detail;
+  drawPath("top", s.paths.top); drawPath("bottom", s.paths.bottom);
+  $("cal").textContent = s.cal.message || "";
+  $("cal").className = s.cal.phase;
+  $("sim").style.display = s.sim ? "block" : "none";
+}
+setInterval(refresh, 250); refresh();
+setInterval(() => $("clock").textContent = new Date().toLocaleTimeString(), 1000);
+</script>
+</body>
+</html>

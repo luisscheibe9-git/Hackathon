@@ -1,102 +1,77 @@
-# Haven live demo: setup, run, trial test
+# Haven live demo (simple, two-path mode)
 
-One use case only: **a person walks in, falls, stays down, and Haven raises FALL DETECTED and buzzes a phone.** Everything below is about making that one moment work every time. It builds on the setup on `main` (3 boards without a router, `esp32/host/server.py`, `demo.html`). The history is in `NOTES.md`.
+**What we show (~30 s):** the boards talk to each other over Wi-Fi, Haven sees a person standing, and when they lie on the floor it raises **FALL DETECTED** and buzzes a phone.
 
-## 0. What you need
-- Boards **#1** (gateway, MAC ...9f:1d:98), **#2** (...9f:27:f4) and **#3** (...1a:80:ac), with antennas attached.
-- #1: a known-good USB **data** cable to the laptop. #2 and #3: **wall chargers**. Weak power banks caused dropouts before.
-- A mat, tape, the laptop with `esp32/.venv` and `esp32/config.yaml` (git-ignored), and a phone with the ntfy app subscribed to the topic in `config.yaml`.
+**How it works:** one fixed rule, no machine learning, so there's nothing to retrain:
 
-## 1. Flash the firmware (once, ~5 min)
-The firmware now **recovers on its own**. If the gateway resets (for example when the laptop opens its port), #2 and #3 reboot after 10 s of silence and rejoin. Nobody needs to press EN.
+| Top path (#1 → #2, high) | Bottom path (#1 → #3, floor) | Haven shows |
+|---|---|---|
+| quiet | quiet | Room empty |
+| disturbed | either | Person standing |
+| quiet | disturbed | Person on the floor → **FALL DETECTED** after 3 s |
 
-Plug in one board at a time. Check its COM port in Device Manager (Mac: `ls /dev/cu.usbserial-*`).
+"Disturbed" means the path's CSI differs from the empty room by more than 1.5× the empty room's own noise. That's measured in a 10 s calibration.
 
-```bash
-arduino-cli compile --fqbn esp32:esp32:esp32 firmware/csi_transmitter
-```
+## 1. Flash (once; skip if the boards already run the latest `firmware/`)
+Board **#1** gets the gateway sketch, **#2 and #3** get the receiver sketch. Each board picks its role from its MAC. The receivers reboot and rejoin on their own if the gateway resets, so you don't need to press EN.
 ```bash
 arduino-cli upload --fqbn esp32:esp32:esp32 --board-options UploadSpeed=230400 -p COM4 firmware/csi_transmitter
-```
-That's the gateway, **#1 only**. Then flash **both #2 and #3** with the same receiver sketch (each board picks its role from its MAC):
-```bash
-arduino-cli compile --fqbn esp32:esp32:esp32 firmware/csi_link_check
 ```
 ```bash
 arduino-cli upload --fqbn esp32:esp32:esp32 --board-options UploadSpeed=230400 -p COM5 firmware/csi_link_check
 ```
-Use 230400 baud. Faster uploads failed on these boards.
+Run `arduino-cli compile --fqbn esp32:esp32:esp32 <sketch folder>` first if it says the sketch isn't built. Use one COM port per board, as shown in Device Manager.
 
-## 2. Set up a small "demo box" (the key to reliability)
-Make the sensing area small and fixed, so the person dominates the signal and the room doesn't matter.
-
+## 2. Place the boards (side view, ~2 m wide)
 ```
-            #2  (high, ~1.3 m, on a stand)
-           /  \
-          /    \        sides ~2-2.5 m
-         / MAT  \       mat inside the triangle, closer to #3
-        /        \
-      #1 -------- #3  (low, ~0.2-0.3 m, on the floor)
-  (table, next to laptop)
-
-   AUDIENCE / JUDGES: behind #1, behind the tape line
+   #1 (gateway, ~0.7 m,          #2 (top, ~1.3-1.5 m on a stand)
+   table, USB to laptop)  ........................ o
+          o  .................                     |
+          |           MAT (on floor, under the     |
+          |           bottom path, near #3)  ..... o #3 (bottom, on the floor)
+   ===================================================== floor
+   JUDGES stand behind #1 / behind a tape line
 ```
-- **Fixed positions:** tape every board down and mark its spot on the floor. Take a photo, and rebuild exactly like it.
-- **Why high and low:** a person standing crosses the high paths, a person lying on the mat crosses the low ones. That difference is what tells standing from lying.
-- **Tape line:** nobody but the actor inside the triangle or walking near it during calibration and the demo. Moving people nearby are the #1 cause of wrong readings.
-- **Moving boards = recalibrate.** Any board move invalidates the calibration.
+- **#2 and #3 together:** put them at the same far end, one above the other. The two paths then run in one vertical plane, one high and one low.
+- **The mat:** lay it along the bottom path, closer to #3. A person lying there blocks the low path but stays under the high one.
+- **Fixed positions:** tape the boards down. If anything moves, recalibrate (30 s).
+- **Power:** #2 and #3 on wall chargers. Weak power banks dropped out before.
 
-## 3. Start Haven
-1. Power #2 and #3, then plug #1 into the laptop.
-2. Close the Observatory or any serial monitor, since only one program can hold the port. Then run, from `esp32/`:
-   ```bash
-   .venv\Scripts\python.exe -u host\server.py --gateway COM4
-   ```
-   (Mac: `.venv/bin/python -u host/server.py --gateway /dev/cu.usbserial-XXXX`)
-3. Open http://127.0.0.1:8940/demo.html. Wait about 20 s. The live page (http://127.0.0.1:8940) should show **3 paths, each above ~20 packets/s**. If a path is missing after 30 s, check that board's power. It reboots itself, so give it 15 s.
-
-## 4. Calibrate on site (~2 min, do it right before the demo)
-On `demo.html`, open the small **▾** menu at the top and record each state, 20 s each:
-1. **Empty room:** everyone behind the tape line.
-2. **Standing:** the actor stands at the edge of the mat, swaying a little.
-3. **Walking:** the actor walks the exact demo path in and out of the triangle.
-4. **Lying down:** the actor lies on the mat in the fall position. Small movements are fine.
-
-Each calibration replaces that state's old data. Redo just one state if it reads wrong.
-
-## 5. The demo script (~45 s)
-1. Press **Start** (Enter). Room shows **empty**.
-2. The actor walks in along the calibrated path: **Person walking**.
-3. Falls onto the mat and **stays down**: **Possible fall**, then **FALL DETECTED** about 3 s later, and the phone buzzes. Hold the phone up for the judges.
-4. Press **R** (Reset) to clear the fall. The actor gets up. **Esc** goes back to the start screen.
-
-Press **T** before judging to check that the phone buzzes (it uses the "Test phone" button).
-
-Do **not** stand still for long in the demo. Standing still is the weakest state and can read as lying. Keep moving until the fall.
-
-## 6. Trial test (do this in the demo room and score it)
-Write down the start time (HH:MM), then run:
-
-| # | Run | Expected | Times |
-|---|---|---|---|
-| A | Full demo script (section 5) | FALL DETECTED within 10 s of hitting the mat | 10 |
-| B | Walk in, walk around, walk out (no fall) | No alert | 3 |
-| C | Stand at the mat edge 15 s, then walk out | No alert | 3 |
-| D | Empty room, 60 s | No alert | 1 |
-
-Press **R** between runs. Then score it from `esp32/`:
+## 3. Start
+From `esp32/`, with the Observatory and any serial monitor closed (only one program can use COM4):
 ```bash
-.venv\Scripts\python.exe host\trial_report.py --since 10:05
+.venv\Scripts\python.exe -u host\simple_demo.py --gateway COM4
 ```
-It lists every state change with its time, counts the fall alerts, and warns if any path dropped below 10 packets/s.
+On a Mac: `.venv/bin/python -u host/simple_demo.py --gateway /dev/cu.usbserial-XXXX`.
 
-**Pass = 10/10 alerts in A, and 0 alerts in B, C and D.**
-- Missed a fall: recalibrate **Lying down**.
-- False alert in C: recalibrate **Standing** (sway a little), or keep the actor moving in the demo.
-- False alert in B or D: recalibrate **Empty room**, then **Walking**, with the audience behind the line.
-- Path warning: fix power and cables first, then recalibrate everything.
+Open **http://127.0.0.1:8950**. Both path bars should show about 20+ packets/s within ~20 s.
+- **Phone alerts** use the ntfy topic in `esp32/config.yaml`. Press **T** to test.
+- **If the boards are swapped** (#3 is the high one): add `--top 3 --bottom 2`.
+
+## 4. Calibrate (under 30 s, right before the demo)
+1. Everyone behind the line, then press **C**. That records 10 s of empty room.
+2. The actor lies on the mat, then press **L**. That records 8 s of lying and sets both thresholds. If the page shows **WARNING**, move the mat closer to #3, away from the top path, and redo C and L.
+3. The actor stands up and steps in. The page should say **Person standing**.
+
+## 5. Demo script
+1. "These three boards talk to each other over Wi-Fi. The top and bottom bars are two of those links." The room shows **empty**.
+2. The actor steps in and stands: **Person standing**, with the top bar green.
+3. The actor lies down on the mat: **Person on the floor** with a 3 s countdown, then **FALL DETECTED**, and the phone buzzes. Hold the phone up.
+4. Press **R** to reset. The actor gets up.
+
+## 6. Trial test (do it 3 times in the demo room before judging)
+Run steps 1–4 of the script, plus 30 s of empty room, plus 15 s of the actor just standing. Pass = the fall alerts every time, and empty or standing never alerts. Every tick is logged to `esp32/data/simple-demo-log-<date>.csv` if you need to check what happened.
+
+**If it misbehaves:**
+- **"Sensor offline":** a board lost power or reset. It reboots itself within about 15 s; check its charger.
+- **Standing reads as "on the floor":** #2 isn't high enough, or the actor stands too far from the paths. Raise #2 or move the actor closer to the boards, then press C and L again.
+- **Lying reads as standing:** the mat is under the top path. Move the mat toward #3, then press C and L again.
+- **Empty reads as standing:** someone was moving during calibration. Press C again with everyone behind the line.
 
 ## 7. At judging
-- **Setup (~3 min):** place the boards on the tape marks, start the server, check the 3 paths, then calibrate all 4 states (section 4). Run the script once quietly if time allows.
-- **If a board fails live:** say so, then play the recorded demo video. It's honest and fast. Never fake the alert.
-- **Bring:** a spare flashed board, spare USB data cable, wall chargers plus a power strip, tape, the mat, a phone with ntfy, and the laptop charger.
+- **Setup:** about 3 minutes. Boards on the tape marks, start the server, C, L, then one quiet run.
+- **Fallback:** if a board fails, say so and play the demo video. Never fake the alert.
+- **Bring:** a spare flashed board, a spare USB data cable, wall chargers plus a power strip, tape, the mat, a phone with ntfy, and the laptop charger.
+- **Rehearsing without boards:** `python host/simple_demo.py --sim` runs the same page with simulated paths.
+
+The full machine-learning version (4-state calibration, `server.py` + `demo.html`) still works and is described in `NOTES.md`. Use it only if there's time to rehearse it.
